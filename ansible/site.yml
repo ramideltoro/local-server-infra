@@ -1,0 +1,120 @@
+---
+- name: Adopt and manage the local server without replacing production AI
+  hosts: local_server
+  become: true
+  gather_facts: true
+  vars:
+    portal_root: /opt/local-server-observability
+  tasks:
+    - name: Require the supported platform
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.distribution == 'Ubuntu'
+          - ansible_facts.architecture == 'x86_64'
+    - name: Ensure deployment directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - "{{ portal_root }}/releases"
+        - /etc/local-server-observability
+        - /var/lib/local-server-infra
+    - name: Create unprivileged portal user
+      ansible.builtin.user:
+        name: observability
+        system: true
+        create_home: false
+        shell: /usr/sbin/nologin
+    - name: Ensure foundational packages are installed
+      ansible.builtin.apt:
+        name: [ca-certificates, curl, jq, cron, tar]
+        state: present
+        update_cache: false
+    - name: Verify adopted binaries exist
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop: [/usr/bin/node, /usr/bin/cloudflared, /usr/bin/alloy, /usr/local/bin/ollama]
+      register: adopted_binaries
+    - name: Require enrolled service binaries
+      ansible.builtin.assert:
+        that: item.stat.exists
+        fail_msg: 'Run the explicit restore/bootstrap workflow to install missing foundations; adoption never replaces live AI binaries.'
+      loop: "{{ adopted_binaries.results }}"
+    - name: Install restricted portal runtime configuration
+      ansible.builtin.copy:
+        src: "{{ lookup('env', 'PORTAL_ENV_FILE') }}"
+        dest: /etc/local-server-observability/runtime.env
+        owner: observability
+        group: observability
+        mode: '0600'
+      no_log: true
+      diff: false
+      notify: Restart portal
+    - name: Install portal service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/local-server-observability.service
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Central infrastructure observability portal
+          After=network-online.target
+          Wants=network-online.target
+          [Service]
+          User=observability
+          Group=observability
+          WorkingDirectory=/opt/local-server-observability/current
+          EnvironmentFile=/etc/local-server-observability/runtime.env
+          ExecStart=/usr/bin/node server/index.mjs
+          Restart=on-failure
+          RestartSec=5
+          MemoryMax=768M
+          CPUQuota=100%
+          Nice=10
+          NoNewPrivileges=true
+          ProtectSystem=strict
+          ProtectHome=true
+          PrivateTmp=true
+          ReadWritePaths=/tmp
+          [Install]
+          WantedBy=multi-user.target
+      notify: Reload systemd
+    - name: Ensure Alloy can read journal records
+      ansible.builtin.user:
+        name: alloy
+        groups: systemd-journal
+        append: true
+      notify: Restart Alloy
+    - name: Add bounded local service metrics collection
+      ansible.builtin.blockinfile:
+        path: /etc/alloy/config.alloy
+        marker: '// {mark} LOCAL SERVER OBSERVABILITY'
+        backup: true
+        block: |
+          prometheus.scrape "local_server_observability" {
+            targets = [{"__address__" = "127.0.0.1:4311", "instance" = "chingadera", "job" = "local-server-observability"}]
+            scrape_interval = "60s"
+            forward_to = [prometheus.remote_write.metrics_service.receiver]
+          }
+          loki.source.journal "local_server_services" {
+            max_age = "1h"
+            labels = {"instance" = "chingadera", "job" = "local-server-services"}
+            matches = "_SYSTEMD_UNIT=nutsnews-local-ai.service _SYSTEMD_UNIT=ollama.service _SYSTEMD_UNIT=local-server-observability.service"
+            forward_to = [loki.write.grafana_cloud_loki.receiver]
+          }
+        validate: /usr/bin/alloy validate %s
+      notify: Restart Alloy
+  handlers:
+    - name: Reload systemd
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+    - name: Restart portal
+      ansible.builtin.systemd_service:
+        name: local-server-observability
+        state: restarted
+        enabled: true
+      when: not ansible_check_mode
+    - name: Restart Alloy
+      ansible.builtin.systemd_service:
+        name: alloy
+        state: restarted
