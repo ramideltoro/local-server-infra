@@ -2,6 +2,9 @@ const e=process.env,base=e.GRAFANA_URL?.replace(/\/$/,'');
 async function api(p,method='GET',body){const r=await fetch(base+p,{method,headers:{Authorization:'Bearer '+e.GRAFANA_SERVICE_ACCOUNT_TOKEN,'Content-Type':'application/json','X-Disable-Provenance':'true'},body:body?JSON.stringify(body):undefined});if(!r.ok)throw Error(`Grafana ${method} ${p}: ${r.status}`);return r.status===204?{}:r.json()}
 const folder='local-server-central';const folders=await api('/api/folders');if(!folders.some(f=>f.uid===folder))await api('/api/folders','POST',{uid:folder,title:'Local server central observability'});
 const rules=[
+ ['local-image-backup-failed','Local image backup failed','max(home_server_backup_last_success{instance="chingadera"})','lt',1,'5m'],
+ ['local-db-backup-failed','Local database backup failed','max(nutsnews_db_backup_last_success{instance="chingadera"})','lt',1,'5m'],
+ ['local-backup-status-stale','Local backup status stale','time() - max(home_server_backup_status_metrics_last_update_timestamp_seconds{instance="chingadera"})','gt',1800,'5m'],
  ['local-qwen-health','Local Qwen unavailable','min(local_server_qwen_health)','lt',1,'2m'],
  ['local-service-health','Local required service down','min(local_server_service_active)','lt',1,'2m'],
  ['local-metrics-missing','Local telemetry missing','absent_over_time(local_server_collector_timestamp_seconds[5m])','gt',0,'1m'],
