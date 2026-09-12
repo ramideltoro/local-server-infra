@@ -1,1 +1,29 @@
-{"hostname":"localserver.ramideltoro.com","sshUser":"infra-deploy","os":"Ubuntu 26.04","ai":{"hostname":"ai.nutsnews.com","port":8788,"ollamaPort":11434,"model":"qwen2.5:3b","authenticationHeader":"x-nutsnews-ai-key"},"portal":{"hostname":"observe.ramideltoro.com","port":4310,"metricsPort":4311,"memoryMax":"768M","cpuQuota":"100%"},"wiki":{"hostname":"localserver.wiki.ramideltoro.com","hosting":"GitHub Pages"},"adoptedVersions":{"node":"22.22.1","ollama":"0.30.10","cloudflared":"2026.6.1","alloy":"1.14.2"}}
+{
+  "hostname": "localserver.ramideltoro.com",
+  "sshUser": "infra-deploy",
+  "os": "Ubuntu 26.04",
+  "ai": {
+    "hostname": "ai.nutsnews.com",
+    "port": 8788,
+    "ollamaPort": 11434,
+    "model": "qwen2.5:3b",
+    "authenticationHeader": "x-nutsnews-ai-key"
+  },
+  "portal": {
+    "hostname": "observe.ramideltoro.com",
+    "port": 4310,
+    "metricsPort": 4311,
+    "memoryMax": "768M",
+    "cpuQuota": "100%"
+  },
+  "wiki": {
+    "hostname": "localserver.wiki.ramideltoro.com",
+    "hosting": "GitHub Pages"
+  },
+  "adoptedVersions": {
+    "node": "22.22.1",
+    "ollama": "0.30.10",
+    "cloudflared": "2026.6.1",
+    "alloy": "1.14.2"
+  }
+}

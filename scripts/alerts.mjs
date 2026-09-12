@@ -1,15 +1,162 @@
-const e=process.env,base=e.GRAFANA_URL?.replace(/\/$/,'');
-async function api(p,method='GET',body){const r=await fetch(base+p,{method,headers:{Authorization:'Bearer '+e.GRAFANA_SERVICE_ACCOUNT_TOKEN,'Content-Type':'application/json','X-Disable-Provenance':'true'},body:body?JSON.stringify(body):undefined});if(!r.ok)throw Error(`Grafana ${method} ${p}: ${r.status}`);return r.status===204?{}:r.json()}
-const folder='local-server-central';const folders=await api('/api/folders');if(!folders.some(f=>f.uid===folder))await api('/api/folders','POST',{uid:folder,title:'Local server central observability'});
-const rules=[
- ['local-image-backup-failed','Local image backup failed','max(home_server_backup_last_success{instance="chingadera"})','lt',1,'5m'],
- ['local-db-backup-failed','Local database backup failed','max(nutsnews_db_backup_last_success{instance="chingadera"})','lt',1,'5m'],
- ['local-backup-status-stale','Local backup status stale','time() - max(home_server_backup_status_metrics_last_update_timestamp_seconds{instance="chingadera"})','gt',1800,'5m'],
- ['local-qwen-health','Local Qwen unavailable','min(local_server_qwen_health)','lt',1,'2m'],
- ['local-service-health','Local required service down','min(local_server_service_active)','lt',1,'2m'],
- ['local-metrics-missing','Local telemetry missing','absent_over_time(local_server_collector_timestamp_seconds[5m])','gt',0,'1m'],
- ['local-cpu-pressure','Local CPU pressure','100 * (1 - avg(rate(node_cpu_seconds_total{instance="chingadera",job="integrations/node_exporter",mode="idle"}[5m])))','gt',90,'10m'],
- ['local-memory-pressure','Local memory pressure','100 * (1 - max(node_memory_MemAvailable_bytes{instance="chingadera"}) / max(node_memory_MemTotal_bytes{instance="chingadera"}))','gt',90,'10m'],
- ['local-disk-pressure','Local disk pressure','100 * (1 - max(node_filesystem_avail_bytes{instance="chingadera",mountpoint="/"}) / max(node_filesystem_size_bytes{instance="chingadera",mountpoint="/"}))','gt',85,'15m'],
+const e = process.env,
+  base = e.GRAFANA_URL?.replace(/\/$/, "");
+async function api(p, method = "GET", body) {
+  const r = await fetch(base + p, {
+    method,
+    headers: {
+      Authorization: "Bearer " + e.GRAFANA_SERVICE_ACCOUNT_TOKEN,
+      "Content-Type": "application/json",
+      "X-Disable-Provenance": "true",
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!r.ok) throw Error(`Grafana ${method} ${p}: ${r.status}`);
+  return r.status === 204 ? {} : r.json();
+}
+const folder = "local-server-central";
+const folders = await api("/api/folders");
+if (!folders.some((f) => f.uid === folder))
+  await api("/api/folders", "POST", {
+    uid: folder,
+    title: "Local server central observability",
+  });
+const rules = [
+  [
+    "local-image-backup-failed",
+    "Local image backup failed",
+    'max(home_server_backup_last_success{instance="chingadera"})',
+    "lt",
+    1,
+    "5m",
+  ],
+  [
+    "local-db-backup-failed",
+    "Local database backup failed",
+    'max(nutsnews_db_backup_last_success{instance="chingadera"})',
+    "lt",
+    1,
+    "5m",
+  ],
+  [
+    "local-backup-status-stale",
+    "Local backup status stale",
+    'time() - max(home_server_backup_status_metrics_last_update_timestamp_seconds{instance="chingadera"})',
+    "gt",
+    1800,
+    "5m",
+  ],
+  [
+    "local-qwen-health",
+    "Local Qwen unavailable",
+    "min(local_server_qwen_health)",
+    "lt",
+    1,
+    "2m",
+  ],
+  [
+    "local-service-health",
+    "Local required service down",
+    "min(local_server_service_active)",
+    "lt",
+    1,
+    "2m",
+  ],
+  [
+    "local-metrics-missing",
+    "Local telemetry missing",
+    "absent_over_time(local_server_collector_timestamp_seconds[5m])",
+    "gt",
+    0,
+    "1m",
+  ],
+  [
+    "local-cpu-pressure",
+    "Local CPU pressure",
+    '100 * (1 - avg(rate(node_cpu_seconds_total{instance="chingadera",job="integrations/node_exporter",mode="idle"}[5m])))',
+    "gt",
+    90,
+    "10m",
+  ],
+  [
+    "local-memory-pressure",
+    "Local memory pressure",
+    '100 * (1 - max(node_memory_MemAvailable_bytes{instance="chingadera"}) / max(node_memory_MemTotal_bytes{instance="chingadera"}))',
+    "gt",
+    90,
+    "10m",
+  ],
+  [
+    "local-disk-pressure",
+    "Local disk pressure",
+    '100 * (1 - max(node_filesystem_avail_bytes{instance="chingadera",mountpoint="/"}) / max(node_filesystem_size_bytes{instance="chingadera",mountpoint="/"}))',
+    "gt",
+    85,
+    "15m",
+  ],
 ];
-for(const [uid,title,expr,op,threshold,duration] of rules){const body={uid,title,folderUID:folder,ruleGroup:'Local server health',condition:'C',for:duration,noDataState:uid==='local-metrics-missing'?'OK':'NoData',execErrState:'Error',annotations:{summary:title,runbook_url:'https://localserver.wiki.ramideltoro.com/technical/alerts/'},labels:{application:'local-server',severity:'warning',managed_by:'local-server-infra'},data:[{refId:'A',relativeTimeRange:{from:600,to:0},datasourceUid:e.PROMETHEUS_UID,model:{refId:'A',expr,instant:true,range:false,intervalMs:60000,maxDataPoints:43200}},{refId:'C',relativeTimeRange:{from:0,to:0},datasourceUid:'__expr__',model:{refId:'C',type:'threshold',expression:'A',conditions:[{evaluator:{type:op,params:[threshold]},operator:{type:'and'},query:{params:['C']},reducer:{type:'last',params:[]},type:'query'}]}}]};let exists=false;try{await api('/api/v1/provisioning/alert-rules/'+uid);exists=true}catch{}await api('/api/v1/provisioning/alert-rules'+(exists?'/'+uid:''),exists?'PUT':'POST',body);console.log('Reconciled alert',title)}
+for (const [uid, title, expr, op, threshold, duration] of rules) {
+  const body = {
+    uid,
+    title,
+    folderUID: folder,
+    ruleGroup: "Local server health",
+    condition: "C",
+    for: duration,
+    noDataState: uid === "local-metrics-missing" ? "OK" : "NoData",
+    execErrState: "Error",
+    annotations: {
+      summary: title,
+      runbook_url: "https://localserver.wiki.ramideltoro.com/technical/alerts/",
+    },
+    labels: {
+      application: "local-server",
+      severity: "warning",
+      managed_by: "local-server-infra",
+    },
+    data: [
+      {
+        refId: "A",
+        relativeTimeRange: { from: 600, to: 0 },
+        datasourceUid: e.PROMETHEUS_UID,
+        model: {
+          refId: "A",
+          expr,
+          instant: true,
+          range: false,
+          intervalMs: 60000,
+          maxDataPoints: 43200,
+        },
+      },
+      {
+        refId: "C",
+        relativeTimeRange: { from: 0, to: 0 },
+        datasourceUid: "__expr__",
+        model: {
+          refId: "C",
+          type: "threshold",
+          expression: "A",
+          conditions: [
+            {
+              evaluator: { type: op, params: [threshold] },
+              operator: { type: "and" },
+              query: { params: ["C"] },
+              reducer: { type: "last", params: [] },
+              type: "query",
+            },
+          ],
+        },
+      },
+    ],
+  };
+  let exists = false;
+  try {
+    await api("/api/v1/provisioning/alert-rules/" + uid);
+    exists = true;
+  } catch {}
+  await api(
+    "/api/v1/provisioning/alert-rules" + (exists ? "/" + uid : ""),
+    exists ? "PUT" : "POST",
+    body,
+  );
+  console.log("Reconciled alert", title);
+}
