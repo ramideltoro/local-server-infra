@@ -2,7 +2,14 @@ name: Manage local server
 on:
   push:
     branches: [main]
-    paths: ['ansible/**', 'services/**', 'scripts/**', 'config/**', '.github/workflows/**']
+    paths:
+      [
+        "ansible/**",
+        "services/**",
+        "scripts/**",
+        "config/**",
+        ".github/workflows/**",
+      ]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -14,7 +21,7 @@ on:
       portal_ref:
         description: Exact portal commit (blank resolves main once)
         type: string
-        default: ''
+        default: ""
 permissions:
   contents: read
 concurrency:
@@ -26,7 +33,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with: {node-version: '22'}
+        with: { node-version: "22" }
       - run: node --test tests/*.test.mjs
       - run: pipx install ansible-core==2.19.2
       - run: ansible-playbook --syntax-check -i ansible/inventory.ini ansible/site.yml
@@ -51,9 +58,9 @@ jobs:
       OPERATION: ${{ inputs.operation || 'deploy' }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with: {path: infra}
+        with: { path: infra }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with: {node-version: '22'}
+        with: { node-version: "22" }
       - name: Resolve source revisions once
         run: |
           ref="$REQUESTED_PORTAL_REF"
@@ -129,7 +136,7 @@ jobs:
           npm run check
           npm run build
           npm test
-          printf '{"portal":"%s","infra":"%s","wiki":"%s"}\n' "$PORTAL_SHA" "$GITHUB_SHA" "$WIKI_SHA" > release.json
+          node -e 'const fs=require("fs");fs.writeFileSync("release.json",JSON.stringify({portal:process.env.PORTAL_SHA,infra:process.env.GITHUB_SHA,wiki:process.env.WIKI_SHA,sources:JSON.parse(fs.readFileSync("../wiki/sources.lock.json","utf8"))}))'
           npm prune --omit=dev
           tar -czf /tmp/portal.tar.gz dist server config node_modules package.json package-lock.json release.json
           scp /tmp/portal.tar.gz localserver.ramideltoro.com:/tmp/local-server-portal.tar.gz

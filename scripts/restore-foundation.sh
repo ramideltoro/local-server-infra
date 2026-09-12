@@ -5,10 +5,16 @@ set -euo pipefail
 test "$(id -u)" = 0
 archive="${1:?Restricted baseline archive required}"
 test -f "$archive"
-apt-get update -qq
-apt-get install -y ca-certificates curl jq tar zstd cron
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
+new_alloy=0
+# Remember what was absent before package installation creates default files.
+tar -tzf "$archive" | while IFS= read -r entry; do
+  case "$entry" in /*|*../*) echo 'Unsafe baseline path' >&2; exit 2;; esac
+  if ! test -e "/$entry"; then printf '%s\n' "$entry"; fi
+done > "$scratch/missing-files"
+apt-get update -qq
+apt-get install -y ca-certificates curl jq tar zstd cron
 fetch() { curl -fsSL --retry 3 "$1" -o "$scratch/$2"; echo "$3  $scratch/$2" | sha256sum -c -; }
 if ! test -x /usr/bin/node; then
   curl -fsSL https://nodejs.org/dist/v22.22.1/node-v22.22.1-linux-x64.tar.xz -o "$scratch/node.tar.xz"
@@ -26,18 +32,21 @@ fi
 if ! test -x /usr/bin/alloy; then
   fetch https://github.com/grafana/alloy/releases/download/v1.14.2/alloy-1.14.2-1.amd64.deb alloy.deb a7203c024aa04b588325aaf85d943a7d4f82c720944e12c8f8ce5ab09d01d548
   apt-get install -y "$scratch/alloy.deb"
+  new_alloy=1
 fi
 if ! command -v ollama >/dev/null; then
   fetch https://github.com/ollama/ollama/releases/download/v0.30.10/ollama-linux-amd64.tar.zst ollama.tar.zst 046d8f28e58d58477a49558d8d1bcb2e81ca8b287f93c44b12ff919c10d178dd
   tar --zstd -xf "$scratch/ollama.tar.zst" -C /usr
+  test -e /usr/local/bin/ollama || ln -s /usr/bin/ollama /usr/local/bin/ollama
 fi
 id ollama >/dev/null 2>&1 || useradd -r -s /bin/false -U -m -d /usr/share/ollama ollama
 id rami >/dev/null 2>&1 || useradd -m -s /bin/bash rami
-# GNU tar skips existing files, preserving the adopted live configuration.
-tar --skip-old-files -xzf "$archive" -C /
+# Restore only paths absent at entry, including package-created default configs.
+if test -s "$scratch/missing-files"; then tar --no-recursion -xzf "$archive" -C / -T "$scratch/missing-files"; fi
 chown -R ollama:ollama /usr/share/ollama
 systemctl daemon-reload
 systemctl enable --now ollama nutsnews-local-ai cloudflared alloy
+if test "$new_alloy" = 1; then systemctl restart alloy; fi
 if ! curl -fsS http://127.0.0.1:11434/api/tags | jq -e '.models[] | select(.name=="qwen2.5:3b")' >/dev/null; then
   ollama pull qwen2.5:3b
 fi
