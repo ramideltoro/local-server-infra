@@ -1,0 +1,162 @@
+name: Manage local server
+on:
+  push:
+    branches: [main]
+    paths: ['ansible/**', 'scripts/**', 'config/**', '.github/workflows/**']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Operation
+        type: choice
+        options: [deploy, check, status, rollback, restore]
+        default: deploy
+      portal_ref:
+        description: Exact portal commit (blank resolves main once)
+        type: string
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  group: local-server-host
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: {node-version: '22'}
+      - run: node --test tests/*.test.mjs
+      - run: pipx install ansible-core==2.19.2
+      - run: ansible-playbook --syntax-check -i ansible/inventory.ini ansible/site.yml
+      - run: bash -n scripts/*.sh
+  manage:
+    needs: validate
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: production
+    env:
+      GH_TOKEN: ${{ secrets.AUTOMATION_TOKEN }}
+      LOCAL_AI_API_KEY: ${{ secrets.LOCAL_AI_API_KEY }}
+      TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+      TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+      REQUESTED_PORTAL_REF: ${{ inputs.portal_ref }}
+      OPERATION: ${{ inputs.operation || 'deploy' }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: {path: infra}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: {node-version: '22'}
+      - name: Resolve source revisions once
+        run: |
+          ref="$REQUESTED_PORTAL_REF"
+          if [ -z "$ref" ]; then ref=$(gh api repos/ramideltoro/local-server-observability/commits/main --jq .sha); fi
+          [[ "$ref" =~ ^[a-f0-9]{40}$ ]]
+          echo "PORTAL_SHA=$ref" >> "$GITHUB_ENV"
+          echo "WIKI_SHA=$(gh api repos/ramideltoro/local-server-wiki/commits/main --jq .sha)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: ramideltoro/local-server-observability
+          ref: ${{ env.PORTAL_SHA }}
+          path: portal
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: ramideltoro/local-server-wiki
+          ref: ${{ env.WIKI_SHA }}
+          path: wiki
+      - name: Require matching documentation
+        if: env.OPERATION == 'deploy' || env.OPERATION == 'restore' || env.OPERATION == 'check'
+        run: |
+          node wiki/scripts/source-lock.mjs check local-server-infra infra
+          node wiki/scripts/source-lock.mjs check local-server-observability portal
+          cd wiki && npm ci && npm run build
+      - name: Install SSH tunnel client
+        run: |
+          curl -fsSL --retry 3 https://github.com/cloudflare/cloudflared/releases/download/2026.6.1/cloudflared-linux-amd64 -o /tmp/cloudflared
+          echo '5861a10a438fe8ddcfebb3b830f83966cbf193edafce0fe2eeb198fbae1f7a22  /tmp/cloudflared' | sha256sum -c -
+          chmod 755 /tmp/cloudflared
+          sudo mv /tmp/cloudflared /usr/local/bin/cloudflared
+          bash infra/scripts/ssh-config.sh
+      - name: Restore missing foundation components
+        if: env.OPERATION == 'restore'
+        env:
+          BASELINE_ARCHIVE_B64: ${{ secrets.BASELINE_ARCHIVE_B64 }}
+        run: |
+          umask 077
+          printf '%s' "$BASELINE_ARCHIVE_B64" | base64 -d > "$RUNNER_TEMP/baseline.tar.gz"
+          scp "$RUNNER_TEMP/baseline.tar.gz" localserver.ramideltoro.com:/tmp/local-server-baseline.tar.gz
+          scp infra/scripts/restore-foundation.sh localserver.ramideltoro.com:/tmp/local-server-restore.sh
+          ssh localserver.ramideltoro.com 'sudo bash /tmp/local-server-restore.sh /tmp/local-server-baseline.tar.gz; result=$?; rm -f /tmp/local-server-baseline.tar.gz; exit $result'
+          rm -f "$RUNNER_TEMP/baseline.tar.gz"
+      - name: Verify current host and Qwen
+        run: |
+          ssh localserver.ramideltoro.com 'hostname; systemctl is-active nutsnews-local-ai ollama cloudflared alloy'
+          node infra/scripts/qwen-check.mjs
+      - name: Reconcile Cloudflare routes and access
+        if: env.OPERATION == 'deploy' || env.OPERATION == 'restore'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ACCESS_SERVICE_TOKEN_ID: ${{ secrets.ACCESS_SERVICE_TOKEN_ID }}
+          OWNER_EMAILS: ${{ secrets.OWNER_EMAILS }}
+        run: node infra/scripts/cloudflare.mjs
+      - name: Report status
+        if: env.OPERATION == 'status'
+        run: ssh localserver.ramideltoro.com 'uptime; free -h; systemctl is-active local-server-observability; curl -fsS http://127.0.0.1:4310/healthz'
+      - name: Roll back portal
+        if: env.OPERATION == 'rollback'
+        run: |
+          scp infra/scripts/rollback.sh localserver.ramideltoro.com:/tmp/local-server-rollback.sh
+          ssh localserver.ramideltoro.com 'sudo bash /tmp/local-server-rollback.sh'
+          node infra/scripts/qwen-check.mjs
+      - name: Build immutable portal release
+        if: env.OPERATION == 'deploy' || env.OPERATION == 'restore'
+        run: |
+          cd portal
+          npm ci
+          npm run check
+          npm test
+          npm run build
+          printf '{"portal":"%s","infra":"%s","wiki":"%s"}\n' "$PORTAL_SHA" "$GITHUB_SHA" "$WIKI_SHA" > release.json
+          npm prune --omit=dev
+          tar -czf /tmp/portal.tar.gz dist server config node_modules package.json package-lock.json release.json
+          scp /tmp/portal.tar.gz localserver.ramideltoro.com:/tmp/local-server-portal.tar.gz
+          ssh localserver.ramideltoro.com "sudo mkdir -p /opt/local-server-observability/releases/$PORTAL_SHA && sudo tar -xzf /tmp/local-server-portal.tar.gz -C /opt/local-server-observability/releases/$PORTAL_SHA && if [ ! -L /opt/local-server-observability/current ]; then sudo ln -s /opt/local-server-observability/releases/$PORTAL_SHA /opt/local-server-observability/current; fi"
+      - name: Materialize restricted configuration
+        if: env.OPERATION == 'deploy' || env.OPERATION == 'restore' || env.OPERATION == 'check'
+        env:
+          PORTAL_RUNTIME_ENV: ${{ secrets.PORTAL_RUNTIME_ENV }}
+        run: |
+          umask 077
+          printf '%s\n' "$PORTAL_RUNTIME_ENV" > "$RUNNER_TEMP/portal.env"
+          echo "PORTAL_ENV_FILE=$RUNNER_TEMP/portal.env" >> "$GITHUB_ENV"
+          pipx install ansible-core==2.19.2
+      - name: Preview host changes
+        if: env.OPERATION == 'check'
+        run: ansible-playbook -i infra/ansible/inventory.ini infra/ansible/site.yml --check
+      - name: Apply host configuration
+        if: env.OPERATION == 'deploy' || env.OPERATION == 'restore'
+        run: ansible-playbook -i infra/ansible/inventory.ini infra/ansible/site.yml
+      - name: Activate and verify
+        if: env.OPERATION == 'deploy' || env.OPERATION == 'restore'
+        run: |
+          scp infra/scripts/activate.sh localserver.ramideltoro.com:/tmp/local-server-activate.sh
+          ssh localserver.ramideltoro.com "sudo bash /tmp/local-server-activate.sh $PORTAL_SHA"
+          node infra/scripts/qwen-check.mjs
+          curl -fsS --retry 5 --retry-delay 3 https://observe.ramideltoro.com/healthz | jq -e '.ok'
+          curl -fsS https://localserver.wiki.ramideltoro.com/technical/qwen/ > /dev/null
+          printf '### Verified release\n\nInfrastructure: `%s`\n\nPortal: `%s`\n\nWiki: `%s`\n\nProduction Qwen inference passed before and after deployment.\n' "$GITHUB_SHA" "$PORTAL_SHA" "$WIKI_SHA" >> "$GITHUB_STEP_SUMMARY"
+      - name: Reconcile local-server alert rules
+        if: env.OPERATION == 'deploy' || env.OPERATION == 'restore'
+        env:
+          GRAFANA_URL: ${{ secrets.GRAFANA_URL }}
+          GRAFANA_SERVICE_ACCOUNT_TOKEN: ${{ secrets.GRAFANA_SERVICE_ACCOUNT_TOKEN }}
+          PROMETHEUS_UID: ${{ secrets.PROMETHEUS_UID }}
+        run: node infra/scripts/alerts.mjs
+      - name: Clean temporary credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/portal.env" "$HOME/.ssh/local-server"
