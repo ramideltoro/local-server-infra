@@ -1,0 +1,7 @@
+.env*
+*.retry
+*.tfstate*
+*.pem
+*private*
+node_modules/
+work/
