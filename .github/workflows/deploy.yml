@@ -127,8 +127,8 @@ jobs:
           cd portal
           npm ci
           npm run check
-          npm test
           npm run build
+          npm test
           printf '{"portal":"%s","infra":"%s","wiki":"%s"}\n' "$PORTAL_SHA" "$GITHUB_SHA" "$WIKI_SHA" > release.json
           npm prune --omit=dev
           tar -czf /tmp/portal.tar.gz dist server config node_modules package.json package-lock.json release.json
