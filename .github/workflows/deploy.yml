@@ -174,6 +174,11 @@ jobs:
         if: env.OPERATION == 'deploy' || env.OPERATION == 'restore'
         run: |
           ssh localserver.ramideltoro.com 'sudo bash -c "set -a; . /etc/local-server-observability/runtime.env; node /opt/local-server-infra/workspace/sync.mjs; chown -R observe-public:observe-public /var/lib/local-server-observability/grafana-public; chown -R observability:observability /var/lib/local-server-observability/grafana-owner; chown observability:observability /var/lib/local-server-observability/catalog.json"'
+      - name: Verify both native Grafana instances
+        if: env.OPERATION == 'deploy' || env.OPERATION == 'restore'
+        run: |
+          ssh localserver.ramideltoro.com 'curl -fsS --retry 12 --retry-connrefused --retry-delay 5 http://127.0.0.1:4320/grafana/api/health' | jq -e '.database == "ok"'
+          ssh localserver.ramideltoro.com 'curl -fsS --retry 12 --retry-connrefused --retry-delay 5 http://127.0.0.1:4321/owner/grafana/api/health' | jq -e '.database == "ok"'
       - name: Reconcile local-server alert rules
         if: env.OPERATION == 'deploy' || env.OPERATION == 'restore'
         env:
