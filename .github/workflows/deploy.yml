@@ -166,6 +166,13 @@ jobs:
           MOOKIE_SERVER_PASSWORD: ${{ secrets.MOOKIE_SERVER_PASSWORD }}
           MOOKIE_TELEMETRY_ENV: ${{ secrets.MOOKIE_TELEMETRY_ENV }}
         run: bash infra/scripts/enroll-mookie.sh
+      - name: Verify Mookie Cloud telemetry
+        if: env.OPERATION == 'deploy' || env.OPERATION == 'restore'
+        env:
+          GRAFANA_URL: ${{ secrets.GRAFANA_URL }}
+          GRAFANA_SERVICE_ACCOUNT_TOKEN: ${{ secrets.GRAFANA_SERVICE_ACCOUNT_TOKEN }}
+          PROMETHEUS_UID: ${{ secrets.PROMETHEUS_UID }}
+        run: node infra/scripts/verify-mookie.mjs
       - name: Activate and verify
         if: env.OPERATION == 'deploy' || env.OPERATION == 'restore'
         run: |
