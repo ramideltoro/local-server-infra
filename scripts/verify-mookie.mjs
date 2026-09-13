@@ -8,7 +8,7 @@ for(let attempt=0;attempt<10;attempt++){
       const values=j.data?.result?.map(r=>Number(r.value[1]))||[];
       if(!values.length||values.some(v=>!Number.isFinite(v))||(i===0&&Math.max(...values)<Date.now()/1000-180))throw Error('Metrics not yet fresh');
     }
-    const j=await get('/api/datasources/proxy/uid/grafanacloud-logs/loki/api/v1/query_range?'+new URLSearchParams({query:'{instance="mookie",job="mookie/journal"}',start:String(BigInt(Date.now()-180000)*1000000n),limit:'1'}));
+    const j=await get('/api/datasources/proxy/uid/grafanacloud-logs/loki/api/v1/query_range?'+new URLSearchParams({query:'{instance="mookie"}',start:String(BigInt(Date.now()-180000)*1000000n),limit:'1'}));
     if(!j.data?.result?.some(s=>s.values?.length))throw Error('Journal not yet fresh');
     console.log('Verified fresh Mookie CPU, memory, hardware, systemd and private journal telemetry');process.exit(0);
   }catch{console.log('Waiting for fresh Mookie telemetry, attempt '+(attempt+1));}
