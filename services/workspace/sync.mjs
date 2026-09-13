@@ -3,6 +3,7 @@ import path from "node:path";
 const root =
   process.env.PORTAL_ROOT || "/opt/local-server-observability/current";
 const dir = process.env.DATA_DIR || "/var/lib/local-server-observability";
+const { presentation } = await import(root + "/server/presentation.mjs");
 const { publicMetrics } = await import(root + "/server/core.mjs");
 const { registeredQueries, queryKey } = await import(
   root + "/server/gateway.mjs"
@@ -111,6 +112,12 @@ for (const item of found) {
     }
   }
   walk(dashboard.panels);
+  for (const panel of panels)
+    if (!["row", "text"].includes(panel.type))
+      Object.assign(
+        panel,
+        presentation(panel.type, panel.fieldConfig?.defaults?.unit),
+      );
   const safe = {
     uid: item.uid,
     title: item.title,
@@ -157,7 +164,7 @@ const panels = publicMetrics.map((m, i) => ({
     defaults: { unit: m.unit, color: { mode: "fixed", fixedColor: "#f5a623" } },
     overrides: [],
   },
-  options: { legend: { displayMode: "hidden" }, tooltip: { mode: "single" } },
+  ...presentation("timeseries", m.unit),
 }));
 await fs.writeFile(
   publicDir + "/fleet-metrics.json",
@@ -200,7 +207,7 @@ for (const d of legacy)
           expr: queryKey(q),
           datasource: { type: "prometheus", uid: "public-metrics" },
         })),
-      fieldConfig: { defaults: { unit: p.unit || "short" }, overrides: [] },
+      ...presentation("timeseries", p.unit),
     }));
     await fs.writeFile(
       publicDir + "/" + d.id + ".json",

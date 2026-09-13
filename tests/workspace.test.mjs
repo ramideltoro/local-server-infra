@@ -57,3 +57,13 @@ test("busy and failed AI preserves deterministic fallback", async () => {
     "template",
   );
 });
+import { inspectionWindow } from "../services/workspace/window.mjs";
+test("missed schedules and budget-capped inspection windows are explicit", () => {
+  const now = Date.parse("2026-09-13T10:00:00Z") / 1000;
+  const w = inspectionWindow("2026-09-01T09:00:00Z", now);
+  assert.equal(w.truncated, true);
+  assert.equal(w.end - w.start, 7 * 86400);
+  assert.equal(w.scheduleDelaySeconds, 3600);
+  assert.equal(w.missedWindows, 11);
+  assert.throws(() => inspectionWindow("invalid", now));
+});
