@@ -10,6 +10,29 @@
           - ansible_facts.hostname == 'mookie'
           - ansible_facts.distribution == 'Debian'
           - ansible_facts.architecture == 'aarch64'
+    - name: Detect memory controller
+      ansible.builtin.command: cat /sys/fs/cgroup/cgroup.controllers
+      register: controllers
+      changed_when: false
+    - name: Enable Raspberry Pi memory cgroups when absent
+      ansible.builtin.lineinfile:
+        path: /boot/firmware/cmdline.txt
+        regexp: '^((?!.*cgroup_enable=memory).*)$'
+        line: '\1 cgroup_enable=memory'
+        backrefs: true
+        backup: true
+      when: "'memory' not in controllers.stdout.split()"
+      register: memory_boot
+    - name: Activate memory limits on newly enrolled Pi
+      ansible.builtin.reboot:
+        reboot_timeout: 240
+        post_reboot_delay: 10
+      when: memory_boot.changed
+    - name: Require enforceable memory limits
+      ansible.builtin.command: cat /sys/fs/cgroup/cgroup.controllers
+      register: enabled_controllers
+      changed_when: false
+      failed_when: "'memory' not in enabled_controllers.stdout.split()"
     - name: Install transport dependencies
       ansible.builtin.apt:
         name: [ca-certificates, curl]
