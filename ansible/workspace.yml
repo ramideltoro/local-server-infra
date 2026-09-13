@@ -10,27 +10,27 @@
     state: directory
     owner: observability
     group: observability
-    mode: '0711'
+    mode: "0711"
 - name: Create isolated Grafana data directories
   ansible.builtin.file:
     path: "/var/lib/local-server-observability/grafana-{{ item }}"
     state: directory
     owner: "{{ 'observe-public' if item == 'public' else 'observability' }}"
     group: "{{ 'observe-public' if item == 'public' else 'observability' }}"
-    mode: '0700'
+    mode: "0700"
   loop: [public, owner]
 - name: Fetch pinned Grafana standalone release
   ansible.builtin.get_url:
     url: https://dl.grafana.com/grafana/release/13.2.1/grafana_13.2.1_33191028959_linux_amd64.tar.gz
     dest: /var/lib/local-server-infra/grafana-13.2.1.tar.gz
     checksum: sha256:849b3f17a0a318a2f1a681b663e9feb4e4fc7f70d43bb0b4ea07cd34b1987462
-    mode: '0644'
+    mode: "0644"
     timeout: 60
 - name: Create Grafana binary directory
   ansible.builtin.file:
     path: /opt/observe-grafana-13.2.1
     state: directory
-    mode: '0755'
+    mode: "0755"
 - name: Extract pinned Grafana without affecting existing services
   ansible.builtin.unarchive:
     src: /var/lib/local-server-infra/grafana-13.2.1.tar.gz
@@ -42,7 +42,7 @@
   ansible.builtin.copy:
     src: ../services/workspace/
     dest: /opt/local-server-infra/workspace/
-    mode: '0755'
+    mode: "0755"
 - name: Configure isolated Grafana instances
   ansible.builtin.shell: |
     set -a
@@ -55,7 +55,7 @@
 - name: Install bounded Grafana services
   ansible.builtin.copy:
     dest: "/etc/systemd/system/observe-grafana-{{ item }}.service"
-    mode: '0644'
+    mode: "0644"
     content: |
       [Unit]
       Description=Observability {{ item }} Grafana

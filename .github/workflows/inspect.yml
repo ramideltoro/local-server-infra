@@ -1,7 +1,7 @@
 name: Daily fleet inspection
 on:
   schedule:
-    - cron: '0 9 * * *'
+    - cron: "0 9 * * *"
   workflow_dispatch:
 permissions:
   contents: write
@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with: { node-version: '22' }
+        with: { node-version: "22" }
       - name: Install authenticated tunnel
         run: |
           curl -fsSL --retry 3 https://github.com/cloudflare/cloudflared/releases/download/2026.6.1/cloudflared-linux-amd64 -o /tmp/cloudflared
@@ -48,7 +48,7 @@ jobs:
       - name: Back up owner workspace consistently
         run: |
           umask 077
-          ssh localserver.ramideltoro.com 'sudo sqlite3 /var/lib/local-server-observability/grafana-owner/grafana.db ".backup /var/lib/local-server-infra/owner-snapshot.db" && sudo cat /var/lib/local-server-infra/owner-snapshot.db && sudo rm /var/lib/local-server-infra/owner-snapshot.db' > "$RUNNER_TEMP/owner.db"
+          ssh localserver.ramideltoro.com 'sudo install -d -m 700 /var/lib/local-server-infra/backups && sudo sqlite3 /var/lib/local-server-observability/grafana-owner/grafana.db ".backup /var/lib/local-server-infra/backups/owner-snapshot.db" && sudo cat /var/lib/local-server-infra/backups/owner-snapshot.db && sudo rm /var/lib/local-server-infra/backups/owner-snapshot.db' > "$RUNNER_TEMP/owner.db"
           node services/workspace/backup.mjs encrypt "$RUNNER_TEMP/owner.db" "$RUNNER_TEMP/owner.enc"
           node services/workspace/backup.mjs decrypt "$RUNNER_TEMP/owner.enc" "$RUNNER_TEMP/owner-restored.db"
           cmp "$RUNNER_TEMP/owner.db" "$RUNNER_TEMP/owner-restored.db"
