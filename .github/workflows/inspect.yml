@@ -43,7 +43,7 @@ jobs:
           cmp "$RUNNER_TEMP/state.json" "$RUNNER_TEMP/restored.json"
           node services/workspace/summary-backup.mjs "$RUNNER_TEMP/state.json" "$RUNNER_TEMP/summary.json"
           node services/workspace/backup.mjs encrypt "$RUNNER_TEMP/summary.json" "$RUNNER_TEMP/summary-$(date -u +%Y%m%dT%H%M%S).enc"
-          gh release view issue-history --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create issue-history --repo "$GITHUB_REPOSITORY" --title 'Encrypted issue history' --notes 'AES-256-GCM report summaries and issue transitions. No diagnostic evidence. Retained indefinitely.'
+          gh release view issue-history --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create issue-history --repo "$GITHUB_REPOSITORY" --draft --title 'Encrypted issue history' --notes 'AES-256-GCM report summaries and issue transitions. No diagnostic evidence. Retained indefinitely.'
           gh release upload issue-history "$RUNNER_TEMP"/summary-*.enc --repo "$GITHUB_REPOSITORY"
       - name: Back up owner workspace consistently
         run: |

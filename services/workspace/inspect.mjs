@@ -318,6 +318,52 @@ for (const [system, id, expr, threshold] of [
     };
   });
 }
+await run("fleet", "cloud-alert-source", async () => {
+  const { alertCatalog } = await import(root + "/server/alerts.mjs");
+  const [rules, groups, instances] = await Promise.all([
+    get("/api/v1/provisioning/alert-rules"),
+    get("/api/prometheus/grafana/api/v1/rules"),
+    get("/api/alertmanager/grafana/api/v2/alerts"),
+  ]);
+  for (const rule of alertCatalog(rules, groups, instances).rules) {
+    const failed = [
+      "firing",
+      "alerting",
+      "evaluation-error",
+      "no-data",
+    ].includes(rule.state);
+    checks.push({
+      system: rule.system,
+      id: "alert:" + rule.id,
+      complete:
+        rule.enabled &&
+        rule.state !== "unknown" &&
+        rule.state !== "evaluation-error" &&
+        rule.state !== "no-data",
+      note: rule.paused
+        ? "Rule paused"
+        : rule.silenced
+          ? "Cloud evaluation inspected; notifications silenced"
+          : "Existing Cloud evaluation inspected",
+      failures: failed
+        ? [
+            {
+              signature: rule.state,
+              summary: rule.name,
+              severity: rule.severity === "critical" ? "critical" : "warning",
+              evidence: [
+                { state: rule.state, intervalSeconds: rule.intervalSeconds },
+              ],
+            },
+          ]
+        : [],
+    });
+  }
+  return {
+    complete: true,
+    note: rules.length + " configured Cloud rules inspected",
+  };
+});
 const report = {
   id: at.replace(/[^0-9]/g, ""),
   at,
