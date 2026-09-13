@@ -36,6 +36,8 @@
     src: /var/lib/local-server-infra/grafana-13.2.1.tar.gz
     dest: /opt/observe-grafana-13.2.1
     remote_src: true
+    owner: root
+    group: root
     extra_opts: [--strip-components=1]
     creates: /opt/observe-grafana-13.2.1/bin/grafana
 - name: Install Git-managed workspace jobs
