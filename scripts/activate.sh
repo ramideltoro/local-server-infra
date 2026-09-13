@@ -7,10 +7,8 @@ previous=$(readlink "$root/current" || true)
 new="$root/releases/$release"
 test -f "$new/server/index.mjs"
 ai_pid=$(systemctl show nutsnews-local-ai --property=MainPID --value)
-if [[ "$previous" == "$new" ]] && systemctl is-active --quiet local-server-observability; then
-  echo 'Requested portal release is already active.'
-  exit 0
-fi
+# Restart even when portal code is unchanged: runtime configuration and the
+# coordinated infrastructure/wiki release manifest may have changed.
 rollback() {
   if [[ -n "$previous" && -d "$previous" ]]; then
     ln -sfn "$previous" "$root/current.next"
