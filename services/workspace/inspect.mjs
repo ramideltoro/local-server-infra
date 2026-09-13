@@ -1,3 +1,4 @@
+import { inspectionWindow } from "./window.mjs";
 import { summarizeWithQwen } from "./summarize.mjs";
 import fs from "node:fs/promises";
 const root =
@@ -11,10 +12,8 @@ const inventory = JSON.parse(
 const state = await readState(),
   at = new Date().toISOString(),
   end = Date.now() / 1000;
-const requestedStart = state.lastSuccess
-  ? Date.parse(state.lastSuccess) / 1000
-  : end - 86400;
-const start = Math.max(requestedStart, end - 7 * 86400),
+const inspection = inspectionWindow(state.lastSuccess, end);
+const { requestedStart, start } = inspection,
   checks = [];
 const base = process.env.GRAFANA_URL.replace(/\/$/, "");
 async function get(route) {
@@ -370,6 +369,8 @@ const report = {
   window: { start: new Date(start * 1000).toISOString(), end: at },
   requestedStart: new Date(requestedStart * 1000).toISOString(),
   delaySeconds: Math.max(0, end - requestedStart - 86400),
+  schedule: inspection,
+  trigger: process.env.INSPECTION_TRIGGER || "manual",
   checks,
   ai: {
     mode: "template",
