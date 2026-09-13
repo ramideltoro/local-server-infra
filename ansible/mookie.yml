@@ -14,13 +14,21 @@
       ansible.builtin.command: cat /sys/fs/cgroup/cgroup.controllers
       register: controllers
       changed_when: false
+    - name: Preserve boot arguments outside the FAT boot partition
+      ansible.builtin.copy:
+        src: /boot/firmware/cmdline.txt
+        dest: /var/lib/mookie-cmdline.before-observability
+        remote_src: true
+        force: false
+        mode: '0600'
+      when: "'memory' not in controllers.stdout.split()"
     - name: Enable Raspberry Pi memory cgroups when absent
       ansible.builtin.lineinfile:
         path: /boot/firmware/cmdline.txt
         regexp: '^((?!.*cgroup_enable=memory).*)$'
         line: '\1 cgroup_enable=memory'
         backrefs: true
-        backup: true
+        backup: false
       when: "'memory' not in controllers.stdout.split()"
       register: memory_boot
     - name: Activate memory limits on newly enrolled Pi
