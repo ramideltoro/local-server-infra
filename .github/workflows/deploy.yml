@@ -163,6 +163,7 @@ jobs:
           ssh localserver.ramideltoro.com "sudo bash /tmp/local-server-activate.sh $PORTAL_SHA"
           node infra/scripts/qwen-check.mjs
           node infra/scripts/worker-probe.mjs
+          RETIRE_PORTAL_ACCESS=true node infra/scripts/cloudflare.mjs
           curl -fsS --retry 5 --retry-delay 3 https://observe.ramideltoro.com/healthz | jq -e '.ok'
           curl -fsS https://localserver.wiki.ramideltoro.com/technical/qwen/ > /dev/null
           printf '### Verified release\n\nInfrastructure: `%s`\n\nPortal: `%s`\n\nWiki: `%s`\n\nProduction Qwen inference passed before and after deployment.\n' "$GITHUB_SHA" "$PORTAL_SHA" "$WIKI_SHA" >> "$GITHUB_STEP_SUMMARY"

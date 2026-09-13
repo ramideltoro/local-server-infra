@@ -125,24 +125,23 @@ const emails =
     /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi,
   ) || [];
 if (!emails.length) throw Error("Owner email configuration required");
-const ownerApps = [];
-for (const suffix of ["/owner", "/api/owner"]) {
-  const a = await app(
-    "Local server owner " + suffix,
-    "observe.ramideltoro.com" + suffix,
+// Only retire the portal edge login after the Google-authenticated release is healthy.
+if (e.RETIRE_PORTAL_ACCESS === "true") {
+  const health = await fetch("https://observe.ramideltoro.com/healthz").then(
+    (r) => r.json(),
   );
-  await policy(
-    a,
-    "Owner identities",
-    "allow",
-    emails.map((email) => ({ email: { email } })),
-  );
-  ownerApps.push(a);
+  if (health.authentication !== "google")
+    throw Error("Google authentication is not active; retaining portal Access");
+  for (const a of apps.filter((a) =>
+    [
+      "observe.ramideltoro.com/owner",
+      "observe.ramideltoro.com/api/owner",
+    ].includes(a.domain),
+  )) {
+    await api(`accounts/${account}/access/apps/${a.id}`, "DELETE");
+  }
 }
-const organization = await api(`accounts/${account}/access/organizations`);
 const out = {
-  ACCESS_AUDIENCE: ownerApps.map((a) => a.aud).join(","),
-  ACCESS_ISSUER: "https://" + organization.auth_domain,
   OWNER_EMAILS: emails.join(","),
   ACCESS_SERVICE_TOKEN_ID: tokenId,
   ...(token
