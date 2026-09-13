@@ -78,6 +78,9 @@ jobs:
           repository: ramideltoro/local-server-wiki
           ref: ${{ env.WIKI_SHA }}
           path: wiki
+      - name: Synchronize documentation for published dashboards only
+        if: env.OPERATION == 'deploy'
+        run: bash infra/scripts/sync-published-docs.sh
       - name: Require matching documentation
         if: env.OPERATION == 'deploy' || env.OPERATION == 'restore' || env.OPERATION == 'check'
         run: |
