@@ -1,0 +1,8 @@
+{
+  "host": "192.168.1.89",
+  "hostname": "mookie.local",
+  "user": "piadmin",
+  "jumpHost": "localserver.ramideltoro.com",
+  "hostKey": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDHFyab/b05oNr4lqqAl8j1voWq0s69O3MNCBQHPsu76",
+  "platform": "Debian 13 arm64, Raspberry Pi 4 Model B, 2 GB RAM"
+}

@@ -94,6 +94,88 @@ const rules = [
     "15m",
   ],
 ];
+rules.push(...[
+  [
+    "mookie-cpu",
+    "Mookie CPU utilization",
+    "100*(1-avg(rate(node_cpu_seconds_total{instance=\"mookie\",mode=\"idle\"}[5m])))",
+    "gt",
+    90,
+    "10m"
+  ],
+  [
+    "mookie-memory",
+    "Mookie Memory used",
+    "100*(1-max(node_memory_MemAvailable_bytes{instance=\"mookie\"})/max(node_memory_MemTotal_bytes{instance=\"mookie\"}))",
+    "gt",
+    90,
+    "10m"
+  ],
+  [
+    "mookie-disk",
+    "Mookie Root disk used",
+    "100*(1-max(node_filesystem_avail_bytes{instance=\"mookie\",mountpoint=\"/\"})/max(node_filesystem_size_bytes{instance=\"mookie\",mountpoint=\"/\"}))",
+    "gt",
+    85,
+    "5m"
+  ],
+  [
+    "mookie-temperature",
+    "Mookie CPU temperature",
+    "max(mookie_temperature_celsius{instance=\"mookie\"})",
+    "gt",
+    80,
+    "5m"
+  ],
+  [
+    "mookie-undervoltage",
+    "Mookie Undervoltage now",
+    "max(mookie_undervoltage{instance=\"mookie\"})",
+    "gt",
+    0,
+    "5m"
+  ],
+  [
+    "mookie-throttled",
+    "Mookie Thermal throttling now",
+    "max(mookie_throttled{instance=\"mookie\"})",
+    "gt",
+    0,
+    "5m"
+  ],
+  [
+    "mookie-services-failed",
+    "Mookie Failed services",
+    "sum(node_systemd_unit_state{instance=\"mookie\",state=\"failed\"})",
+    "gt",
+    0,
+    "5m"
+  ],
+  [
+    "mookie-restarts",
+    "Mookie Service restarts over 1 hour",
+    "sum(increase(node_systemd_service_restart_total{instance=\"mookie\"}[1h]))",
+    "gt",
+    3,
+    "5m"
+  ],
+  [
+    "mookie-telemetry-age",
+    "Mookie Hardware telemetry age",
+    "time()-max(mookie_collector_timestamp_seconds{instance=\"mookie\"})",
+    "gt",
+    180,
+    "5m"
+  ],
+  [
+    "mookie-metrics-missing",
+    "Mookie telemetry missing",
+    "absent_over_time(mookie_collector_timestamp_seconds{instance=\"mookie\"}[5m])",
+    "gt",
+    0,
+    "1m"
+  ]
+]);
 for (const [uid, title, expr, op, threshold, duration] of rules) {
   const body = {
     uid,
@@ -102,14 +184,15 @@ for (const [uid, title, expr, op, threshold, duration] of rules) {
     ruleGroup: "Local server health",
     condition: "C",
     for: duration,
-    noDataState: uid === "local-metrics-missing" ? "OK" : "NoData",
+    noDataState: uid.endsWith("metrics-missing") ? "OK" : "NoData",
     execErrState: "Error",
     annotations: {
       summary: title,
       runbook_url: "https://localserver.wiki.ramideltoro.com/technical/alerts/",
     },
     labels: {
-      application: "local-server",
+      application: uid.startsWith("mookie-") ? "mookie" : "local-server",
+      server: uid.startsWith("mookie-") ? "mookie" : "local",
       severity: "warning",
       managed_by: "local-server-infra",
     },

@@ -77,7 +77,9 @@ for (const m of publicMetrics) {
       const recent = values
         .filter((v) => Number(v[0]) > end - 900)
         .map((v) => Number(v[1]));
-      const threshold = /cpu|memory/.test(m.id)
+      const threshold = m.id.startsWith("mookie-")
+        ? (m.inspectionThreshold ?? (m.id.endsWith("availability") ? 99 : null))
+        : (/cpu|memory/.test(m.id)
         ? 90
         : /disk/.test(m.id)
           ? 85
@@ -85,7 +87,7 @@ for (const m of publicMetrics) {
             ? 7 * 86400
             : /availability|database/.test(m.id)
               ? 99
-              : null;
+              : null);
       if (
         threshold !== null &&
         recent.length &&
@@ -126,6 +128,7 @@ const instances = {
   "backend-vps": "backend.nutsnews.com",
   "nutsnews-vps": "vps.nutsnews.com",
   raspberry: "rpi4",
+  mookie: "mookie",
 };
 for (const server of inventory.servers) {
   for (const service of server.services)
@@ -255,7 +258,7 @@ for (const server of inventory.servers) {
       failures: [],
       note: server.limitation || server.evidence,
     });
-  for (const id of ["restart-patterns", "backup-freshness"])
+  for (const id of (server.id === "mookie" ? ["backup-freshness"] : ["restart-patterns", "backup-freshness"]))
     checks.push({
       system: server.id,
       id,
