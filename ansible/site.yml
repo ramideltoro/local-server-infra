@@ -75,10 +75,12 @@
           ProtectSystem=strict
           ProtectHome=true
           PrivateTmp=true
-          ReadWritePaths=/tmp
+          ReadWritePaths=/tmp /var/lib/local-server-observability
           [Install]
           WantedBy=multi-user.target
       notify: Reload systemd
+    - name: Configure public observability workspace
+      ansible.builtin.import_tasks: workspace.yml
     - name: Ensure Alloy can read journal records
       ansible.builtin.user:
         name: alloy

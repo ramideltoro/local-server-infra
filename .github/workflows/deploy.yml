@@ -167,6 +167,10 @@ jobs:
           curl -fsS --retry 5 --retry-delay 3 https://observe.ramideltoro.com/healthz | jq -e '.ok'
           curl -fsS https://localserver.wiki.ramideltoro.com/technical/qwen/ > /dev/null
           printf '### Verified release\n\nInfrastructure: `%s`\n\nPortal: `%s`\n\nWiki: `%s`\n\nProduction Qwen inference passed before and after deployment.\n' "$GITHUB_SHA" "$PORTAL_SHA" "$WIKI_SHA" >> "$GITHUB_STEP_SUMMARY"
+      - name: Synchronize native dashboards
+        if: env.OPERATION == 'deploy' || env.OPERATION == 'restore'
+        run: |
+          ssh localserver.ramideltoro.com 'sudo bash -c "set -a; . /etc/local-server-observability/runtime.env; node /opt/local-server-infra/workspace/sync.mjs; chown -R observe-public:observe-public /var/lib/local-server-observability/grafana-public; chown -R observability:observability /var/lib/local-server-observability/grafana-owner; chown observability:observability /var/lib/local-server-observability/catalog.json"'
       - name: Reconcile local-server alert rules
         if: env.OPERATION == 'deploy' || env.OPERATION == 'restore'
         env:

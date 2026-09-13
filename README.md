@@ -29,3 +29,9 @@ Run `node --test tests/*.test.mjs`, `ansible-playbook --syntax-check -i ansible/
 ## Documentation contract
 
 Behavior changes require updated Summary, Technical, and Expert wiki topics and a matching source fingerprint. CI blocks deployment when documentation is stale. See the wiki for operating procedures, limitations, and the complete dependency map.
+
+## Public workspace and daily inspection
+
+The infrastructure pipeline provisions two isolated, resource-limited Grafana 13.2.1 processes and the Git-managed jobs in `services/workspace`. The public process has no Cloud datasource credentials. Daily inspection runs at 09:00 UTC through `inspect.yml`, publishes deterministic issue history and coverage, and encrypts report backups with `REPORT_BACKUP_KEY`. A backup roundtrip is verified on each run. Summaries and transitions persist indefinitely; detailed evidence artifacts expire after 90 days.
+
+Google-authenticated manual dispatch and validated dashboard publishing use the existing automation credential, held only in the private portal runtime configuration. No email or messaging notifications are added. Read the [daily-report operations guide](https://localserver.wiki.ramideltoro.com/technical/daily-reports/) and [dashboard editing guide](https://localserver.wiki.ramideltoro.com/technical/workspace-editing/) before changing policy.

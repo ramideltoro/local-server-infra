@@ -1,0 +1,55 @@
+name: Daily fleet inspection
+on:
+  schedule:
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: local-server-host
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment: production
+    env:
+      GH_TOKEN: ${{ secrets.AUTOMATION_TOKEN }}
+      TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+      TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+      REPORT_BACKUP_KEY: ${{ secrets.REPORT_BACKUP_KEY }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: { node-version: '22' }
+      - name: Install authenticated tunnel
+        run: |
+          curl -fsSL --retry 3 https://github.com/cloudflare/cloudflared/releases/download/2026.6.1/cloudflared-linux-amd64 -o /tmp/cloudflared
+          echo '5861a10a438fe8ddcfebb3b830f83966cbf193edafce0fe2eeb198fbae1f7a22  /tmp/cloudflared' | sha256sum -c -
+          chmod 755 /tmp/cloudflared
+          sudo mv /tmp/cloudflared /usr/local/bin/cloudflared
+          bash scripts/ssh-config.sh
+      - name: Inspect and synchronize through Git-managed jobs
+        run: |
+          ssh localserver.ramideltoro.com 'sudo bash -c "set -a; . /etc/local-server-observability/runtime.env; node /opt/local-server-infra/workspace/inspect.mjs; node /opt/local-server-infra/workspace/sync.mjs; chown -R observe-public:observe-public /var/lib/local-server-observability/grafana-public; chown -R observability:observability /var/lib/local-server-observability/grafana-owner; chown observability:observability /var/lib/local-server-observability/state.json /var/lib/local-server-observability/catalog.json"'
+      - name: Encrypt reports and verify restoration
+        run: |
+          umask 077
+          ssh localserver.ramideltoro.com 'sudo cat /var/lib/local-server-observability/state.json' > "$RUNNER_TEMP/state.json"
+          node services/workspace/backup.mjs encrypt "$RUNNER_TEMP/state.json" "$RUNNER_TEMP/reports.enc"
+          node services/workspace/backup.mjs decrypt "$RUNNER_TEMP/reports.enc" "$RUNNER_TEMP/restored.json"
+          cmp "$RUNNER_TEMP/state.json" "$RUNNER_TEMP/restored.json"
+          node services/workspace/summary-backup.mjs "$RUNNER_TEMP/state.json" "$RUNNER_TEMP/summary.json"
+          node services/workspace/backup.mjs encrypt "$RUNNER_TEMP/summary.json" "$RUNNER_TEMP/summary-$(date -u +%Y%m%dT%H%M%S).enc"
+          gh release view issue-history --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create issue-history --repo "$GITHUB_REPOSITORY" --title 'Encrypted issue history' --notes 'AES-256-GCM report summaries and issue transitions. No diagnostic evidence. Retained indefinitely.'
+          gh release upload issue-history "$RUNNER_TEMP"/summary-*.enc --repo "$GITHUB_REPOSITORY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: encrypted-report-evidence-${{ github.run_id }}
+          path: ${{ runner.temp }}/reports.enc
+          retention-days: 90
+      - name: Clean plaintext and credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/state.json" "$RUNNER_TEMP/restored.json" "$RUNNER_TEMP/summary.json" "$HOME/.ssh/local-server"
