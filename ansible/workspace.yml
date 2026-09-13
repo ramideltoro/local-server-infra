@@ -1,0 +1,87 @@
+- name: Create public Grafana account with no Cloud credential access
+  ansible.builtin.user:
+    name: observe-public
+    system: true
+    create_home: false
+    shell: /usr/sbin/nologin
+- name: Create durable workspace root
+  ansible.builtin.file:
+    path: /var/lib/local-server-observability
+    state: directory
+    owner: observability
+    group: observability
+    mode: "0711"
+- name: Create isolated Grafana data directories
+  ansible.builtin.file:
+    path: "/var/lib/local-server-observability/grafana-{{ item }}"
+    state: directory
+    owner: "{{ 'observe-public' if item == 'public' else 'observability' }}"
+    group: "{{ 'observe-public' if item == 'public' else 'observability' }}"
+    mode: "0700"
+  loop: [public, owner]
+- name: Fetch pinned Grafana standalone release
+  ansible.builtin.get_url:
+    url: https://dl.grafana.com/grafana/release/13.2.1/grafana_13.2.1_33191028959_linux_amd64.tar.gz
+    dest: /var/lib/local-server-infra/grafana-13.2.1.tar.gz
+    checksum: sha256:849b3f17a0a318a2f1a681b663e9feb4e4fc7f70d43bb0b4ea07cd34b1987462
+    mode: "0644"
+    timeout: 60
+- name: Create Grafana binary directory
+  ansible.builtin.file:
+    path: /opt/observe-grafana-13.2.1
+    state: directory
+    mode: "0755"
+- name: Extract pinned Grafana without affecting existing services
+  ansible.builtin.unarchive:
+    src: /var/lib/local-server-infra/grafana-13.2.1.tar.gz
+    dest: /opt/observe-grafana-13.2.1
+    remote_src: true
+    extra_opts: [--strip-components=1]
+    creates: /opt/observe-grafana-13.2.1/bin/grafana
+- name: Install Git-managed workspace jobs
+  ansible.builtin.copy:
+    src: ../services/workspace/
+    dest: /opt/local-server-infra/workspace/
+    mode: "0755"
+- name: Configure isolated Grafana instances
+  ansible.builtin.shell: |
+    set -a
+    . /etc/local-server-observability/runtime.env
+    /usr/bin/node /opt/local-server-infra/workspace/configure.mjs
+    chown -R observability:observability /etc/local-server-observability/grafana-owner
+  args:
+    executable: /bin/bash
+  no_log: true
+- name: Install bounded Grafana services
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/observe-grafana-{{ item }}.service"
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Observability {{ item }} Grafana
+      After=network-online.target
+      [Service]
+      User={{ 'observe-public' if item == 'public' else 'observability' }}
+      Group={{ 'observe-public' if item == 'public' else 'observability' }}
+      WorkingDirectory=/opt/observe-grafana-13.2.1
+      ExecStart=/opt/observe-grafana-13.2.1/bin/grafana server --homepath=/opt/observe-grafana-13.2.1 --config=/etc/local-server-observability/grafana-{{ item }}/grafana.ini
+      Restart=on-failure
+      RestartSec=5
+      MemoryMax=512M
+      CPUQuota=50%
+      Nice=15
+      NoNewPrivileges=true
+      ProtectSystem=strict
+      ProtectHome=true
+      PrivateTmp=true
+      ReadWritePaths=/var/lib/local-server-observability/grafana-{{ item }}
+      [Install]
+      WantedBy=multi-user.target
+  loop: [public, owner]
+- name: Start isolated Grafana instances
+  ansible.builtin.systemd_service:
+    name: "observe-grafana-{{ item }}"
+    state: restarted
+    enabled: true
+    daemon_reload: true
+  loop: [public, owner]

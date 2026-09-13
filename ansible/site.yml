@@ -15,7 +15,7 @@
       ansible.builtin.file:
         path: "{{ item }}"
         state: directory
-        mode: '0755'
+        mode: "0755"
       loop:
         - "{{ portal_root }}/releases"
         - /etc/local-server-observability
@@ -28,18 +28,24 @@
         shell: /usr/sbin/nologin
     - name: Ensure foundational packages are installed
       ansible.builtin.apt:
-        name: [ca-certificates, curl, jq, cron, tar]
+        name: [ca-certificates, curl, jq, cron, tar, sqlite3]
         state: present
         update_cache: false
     - name: Verify adopted binaries exist
       ansible.builtin.stat:
         path: "{{ item }}"
-      loop: [/usr/bin/node, /usr/bin/cloudflared, /usr/bin/alloy, /usr/local/bin/ollama]
+      loop:
+        [
+          /usr/bin/node,
+          /usr/bin/cloudflared,
+          /usr/bin/alloy,
+          /usr/local/bin/ollama,
+        ]
       register: adopted_binaries
     - name: Require enrolled service binaries
       ansible.builtin.assert:
         that: item.stat.exists
-        fail_msg: 'Run the explicit restore/bootstrap workflow to install missing foundations; adoption never replaces live AI binaries.'
+        fail_msg: "Run the explicit restore/bootstrap workflow to install missing foundations; adoption never replaces live AI binaries."
       loop: "{{ adopted_binaries.results }}"
     - name: Install restricted portal runtime configuration
       ansible.builtin.copy:
@@ -47,14 +53,14 @@
         dest: /etc/local-server-observability/runtime.env
         owner: observability
         group: observability
-        mode: '0600'
+        mode: "0600"
       no_log: true
       diff: false
       notify: Restart portal
     - name: Install portal service
       ansible.builtin.copy:
         dest: /etc/systemd/system/local-server-observability.service
-        mode: '0644'
+        mode: "0644"
         content: |
           [Unit]
           Description=Central infrastructure observability portal
@@ -75,10 +81,12 @@
           ProtectSystem=strict
           ProtectHome=true
           PrivateTmp=true
-          ReadWritePaths=/tmp
+          ReadWritePaths=/tmp /var/lib/local-server-observability
           [Install]
           WantedBy=multi-user.target
       notify: Reload systemd
+    - name: Configure public observability workspace
+      ansible.builtin.import_tasks: workspace.yml
     - name: Ensure Alloy can read journal records
       ansible.builtin.user:
         name: alloy
@@ -88,7 +96,7 @@
     - name: Add bounded local service metrics collection
       ansible.builtin.blockinfile:
         path: /etc/alloy/config.alloy
-        marker: '// {mark} LOCAL SERVER OBSERVABILITY'
+        marker: "// {mark} LOCAL SERVER OBSERVABILITY"
         backup: true
         block: |
           prometheus.scrape "local_server_observability" {
