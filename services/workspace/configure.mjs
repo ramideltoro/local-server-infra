@@ -1,5 +1,8 @@
 import { createHmac } from "node:crypto";
 import fs from "node:fs/promises";
+const cloudResponse=await fetch(process.env.GRAFANA_URL.replace(/\/$/,'')+'/api/datasources',{headers:{Authorization:'Bearer '+process.env.GRAFANA_SERVICE_ACCOUNT_TOKEN},signal:AbortSignal.timeout(15000)});
+if(!cloudResponse.ok)throw Error('Cloud datasource discovery failed');
+const ownerSources=(await cloudResponse.json()).filter(d=>['prometheus','loki','tempo','graphite','grafana-pyroscope-datasource'].includes(d.type)).map(d=>({name:d.name,uid:d.uid,type:d.type,access:'proxy',url:process.env.GRAFANA_URL.replace(/\/$/,'')+'/api/datasources/proxy/uid/'+encodeURIComponent(d.uid),isDefault:d.uid===process.env.PROMETHEUS_UID,editable:false,jsonData:{httpHeaderName1:'Authorization',httpMethod:'GET'},secureJsonData:{httpHeaderValue1:'Bearer '+process.env.GRAFANA_SERVICE_ACCOUNT_TOKEN}}));
 const data = "/var/lib/local-server-observability";
 for (const scope of ["public", "owner"]) {
   const home = `${data}/grafana-${scope}`,
@@ -31,41 +34,7 @@ for (const scope of ["public", "owner"]) {
             jsonData: { httpMethod: "POST", timeInterval: "60s" },
           },
         ]
-      : [
-          {
-            name: "Cloud metrics",
-            uid: process.env.PROMETHEUS_UID,
-            type: "prometheus",
-            access: "proxy",
-            url:
-              process.env.GRAFANA_URL.replace(/\/$/, "") +
-              "/api/datasources/proxy/uid/" +
-              process.env.PROMETHEUS_UID,
-            isDefault: true,
-            editable: false,
-            jsonData: { httpHeaderName1: "Authorization", httpMethod: "GET" },
-            secureJsonData: {
-              httpHeaderValue1:
-                "Bearer " + process.env.GRAFANA_SERVICE_ACCOUNT_TOKEN,
-            },
-          },
-          {
-            name: "Cloud logs",
-            uid: process.env.LOKI_UID,
-            type: "loki",
-            access: "proxy",
-            url:
-              process.env.GRAFANA_URL.replace(/\/$/, "") +
-              "/api/datasources/proxy/uid/" +
-              process.env.LOKI_UID,
-            editable: false,
-            jsonData: { httpHeaderName1: "Authorization" },
-            secureJsonData: {
-              httpHeaderValue1:
-                "Bearer " + process.env.GRAFANA_SERVICE_ACCOUNT_TOKEN,
-            },
-          },
-        ];
+      : ownerSources;
   await fs.writeFile(
     config + "/provisioning/datasources/sources.yaml",
     JSON.stringify({ apiVersion: 1, datasources: sources }),
