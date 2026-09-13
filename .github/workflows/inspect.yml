@@ -45,11 +45,21 @@ jobs:
           node services/workspace/backup.mjs encrypt "$RUNNER_TEMP/summary.json" "$RUNNER_TEMP/summary-$(date -u +%Y%m%dT%H%M%S).enc"
           gh release view issue-history --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create issue-history --repo "$GITHUB_REPOSITORY" --title 'Encrypted issue history' --notes 'AES-256-GCM report summaries and issue transitions. No diagnostic evidence. Retained indefinitely.'
           gh release upload issue-history "$RUNNER_TEMP"/summary-*.enc --repo "$GITHUB_REPOSITORY"
+      - name: Back up owner workspace consistently
+        run: |
+          umask 077
+          ssh localserver.ramideltoro.com 'sudo sqlite3 /var/lib/local-server-observability/grafana-owner/grafana.db ".backup /var/lib/local-server-infra/owner-snapshot.db" && sudo cat /var/lib/local-server-infra/owner-snapshot.db && sudo rm /var/lib/local-server-infra/owner-snapshot.db' > "$RUNNER_TEMP/owner.db"
+          node services/workspace/backup.mjs encrypt "$RUNNER_TEMP/owner.db" "$RUNNER_TEMP/owner.enc"
+          node services/workspace/backup.mjs decrypt "$RUNNER_TEMP/owner.enc" "$RUNNER_TEMP/owner-restored.db"
+          cmp "$RUNNER_TEMP/owner.db" "$RUNNER_TEMP/owner-restored.db"
+          test "$(sqlite3 "$RUNNER_TEMP/owner-restored.db" 'PRAGMA integrity_check;')" = ok
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: encrypted-report-evidence-${{ github.run_id }}
-          path: ${{ runner.temp }}/reports.enc
+          path: |
+            ${{ runner.temp }}/reports.enc
+            ${{ runner.temp }}/owner.enc
           retention-days: 90
       - name: Clean plaintext and credentials
         if: always()
-        run: rm -f "$RUNNER_TEMP/state.json" "$RUNNER_TEMP/restored.json" "$RUNNER_TEMP/summary.json" "$HOME/.ssh/local-server"
+        run: rm -f "$RUNNER_TEMP/state.json" "$RUNNER_TEMP/restored.json" "$RUNNER_TEMP/summary.json" "$RUNNER_TEMP/owner.db" "$RUNNER_TEMP/owner-restored.db" "$HOME/.ssh/local-server"

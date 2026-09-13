@@ -28,7 +28,7 @@
         shell: /usr/sbin/nologin
     - name: Ensure foundational packages are installed
       ansible.builtin.apt:
-        name: [ca-certificates, curl, jq, cron, tar]
+        name: [ca-certificates, curl, jq, cron, tar, sqlite3]
         state: present
         update_cache: false
     - name: Verify adopted binaries exist
