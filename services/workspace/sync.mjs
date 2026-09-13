@@ -266,3 +266,25 @@ console.log(
     (catalog.length - found.length) +
     " portal dashboards",
 );
+// Create the editable folder only when missing; never provision workspace copies.
+const ownerHeaders = {
+  "X-WEBAUTH-USER": "portal-owner",
+  "Content-Type": "application/json",
+};
+const foldersResponse = await fetch(
+  "http://127.0.0.1:4321/owner/grafana/api/folders",
+  { headers: ownerHeaders, signal: AbortSignal.timeout(10000) },
+);
+if (!foldersResponse.ok) throw Error("Owner workspace folder discovery failed");
+if (!(await foldersResponse.json()).some((f) => f.title === "My dashboards")) {
+  const result = await fetch(
+    "http://127.0.0.1:4321/owner/grafana/api/folders",
+    {
+      method: "POST",
+      headers: ownerHeaders,
+      body: JSON.stringify({ uid: "my-dashboards", title: "My dashboards" }),
+      signal: AbortSignal.timeout(10000),
+    },
+  );
+  if (!result.ok) throw Error("Owner workspace folder creation failed");
+}
