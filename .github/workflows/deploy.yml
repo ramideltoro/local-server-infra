@@ -37,7 +37,8 @@ jobs:
       - run: node --test tests/*.test.mjs
       - run: pipx install ansible-core==2.19.2
       - run: ansible-playbook --syntax-check -i ansible/inventory.ini ansible/site.yml
-      - run: bash -n scripts/*.sh
+      - run: ansible-playbook --syntax-check -i "mookie," ansible/mookie.yml
+      - run: bash -n scripts/*.sh services/mookie/*.sh
   manage:
     needs: validate
     if: github.event_name != 'pull_request'
@@ -159,6 +160,12 @@ jobs:
       - name: Apply host configuration
         if: env.OPERATION == 'deploy' || env.OPERATION == 'restore'
         run: ansible-playbook -i infra/ansible/inventory.ini infra/ansible/site.yml
+      - name: Enroll Mookie server telemetry
+        if: env.OPERATION == 'deploy' || env.OPERATION == 'restore'
+        env:
+          MOOKIE_SERVER_PASSWORD: ${{ secrets.MOOKIE_SERVER_PASSWORD }}
+          MOOKIE_TELEMETRY_ENV: ${{ secrets.MOOKIE_TELEMETRY_ENV }}
+        run: bash infra/scripts/enroll-mookie.sh
       - name: Activate and verify
         if: env.OPERATION == 'deploy' || env.OPERATION == 'restore'
         run: |

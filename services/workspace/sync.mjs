@@ -223,6 +223,11 @@ for (const d of legacy)
       }),
       { mode: 0o600 },
     );
+    if (d.application === "mookie") {
+      const privatePanels = d.panels.map((p,i)=>({id:i+1,title:p.title,type:"timeseries",gridPos:{x:(i%2)*12,y:Math.floor(i/2)*8,w:12,h:8},datasource:{type:"prometheus",uid:process.env.PROMETHEUS_UID},targets:p.queries.map((expr,n)=>({refId:String.fromCharCode(65+n),expr,datasource:{type:"prometheus",uid:process.env.PROMETHEUS_UID}})),...presentation("timeseries",p.unit)}));
+      privatePanels.push({id:100,title:"Private journal logs",type:"logs",gridPos:{x:0,y:Math.ceil(d.panels.length/2)*8,w:24,h:12},datasource:{type:"loki",uid:process.env.LOKI_UID},targets:[{refId:"A",expr:'{instance="mookie"}',datasource:{type:"loki",uid:process.env.LOKI_UID}}],options:{showTime:true,wrapLogMessage:true}});
+      await fs.writeFile(ownerDir+"/"+d.id+".json",JSON.stringify({uid:d.id,title:d.title,editable:false,schemaVersion:39,panels:privatePanels,time:{from:"now-1h",to:"now"},templating:{list:[]},annotations:{list:[]}}),{mode:0o600});
+    }
     catalog.push({
       id: d.id,
       title: d.title,
@@ -232,7 +237,7 @@ for (const d of legacy)
       publicPath: "/grafana/d/" + d.id + "/view?theme=dark&kiosk",
       limitation:
         "Approved metric queries, fixed server scope, anonymous series labels",
-      ownerPath: "/owner/?legacy=1#" + d.application,
+      ownerPath: d.application === "mookie" ? "/owner/grafana/d/mookie-server/view" : "/owner/?legacy=1#" + d.application,
     });
   }
 try {
