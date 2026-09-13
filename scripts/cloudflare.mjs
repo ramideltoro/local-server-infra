@@ -124,7 +124,6 @@ const emails =
   (e.OWNER_EMAILS || e.ADMIN_EMAILS || "").match(
     /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi,
   ) || [];
-if (!emails.length) throw Error("Owner email configuration required");
 // Only retire the portal edge login after the Google-authenticated release is healthy.
 if (e.RETIRE_PORTAL_ACCESS === "true") {
   const health = await fetch("https://observe.ramideltoro.com/healthz").then(
