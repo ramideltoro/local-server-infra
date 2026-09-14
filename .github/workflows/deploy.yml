@@ -186,6 +186,7 @@ jobs:
         run: |
           ssh localserver.ramideltoro.com "sudo -u observability bash -c 'set -a; . /etc/local-server-observability/runtime.env; node /opt/local-server-observability/releases/$PORTAL_SHA/server/operations-preflight.mjs'"
       - name: Activate and verify
+        id: activation
         if: env.OPERATION == 'deploy' || env.OPERATION == 'restore'
         run: |
           scp infra/scripts/activate.sh localserver.ramideltoro.com:/tmp/local-server-activate.sh
@@ -218,6 +219,16 @@ jobs:
           GRAFANA_SERVICE_ACCOUNT_TOKEN: ${{ secrets.GRAFANA_SERVICE_ACCOUNT_TOKEN }}
           PROMETHEUS_UID: ${{ secrets.PROMETHEUS_UID }}
         run: node infra/scripts/alerts.mjs
+      - name: Record failed activation and rollback attempt
+        if: failure() && steps.activation.outcome == 'failure'
+        run: |
+          scp infra/services/workspace/record-event.mjs localserver.ramideltoro.com:/tmp/observe-record-event.mjs
+          ssh localserver.ramideltoro.com "sudo -u observability node /tmp/observe-record-event.mjs automatic-rollback failure $GITHUB_RUN_ID $GITHUB_SHA"
+      - name: Record successful deployment or rollback
+        if: success() && (env.OPERATION == 'deploy' || env.OPERATION == 'restore' || env.OPERATION == 'rollback')
+        run: |
+          scp infra/services/workspace/record-event.mjs localserver.ramideltoro.com:/tmp/observe-record-event.mjs
+          ssh localserver.ramideltoro.com "sudo -u observability node /tmp/observe-record-event.mjs $OPERATION success $GITHUB_RUN_ID $GITHUB_SHA"
       - name: Clean temporary credentials
         if: always()
         run: rm -f "$RUNNER_TEMP/portal.env" "$HOME/.ssh/local-server"
