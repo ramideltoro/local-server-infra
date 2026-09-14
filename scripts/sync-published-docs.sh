@@ -8,12 +8,13 @@ git -C portal fetch origin "$previous" --depth=1
 changes=$(git -C portal diff --name-only "$previous" "$PORTAL_SHA")
 [ -n "$changes" ] || exit 0
 while IFS= read -r file; do
-  [[ "$file" == config/published/*.json ]] || exit 0
+  [[ "$file" == config/published/*.json || "$file" == config/operations.json ]] || exit 0
 done <<< "$changes"
 node wiki/scripts/source-lock.mjs check local-server-infra infra
 git -C portal worktree add --detach "$RUNNER_TEMP/previous-portal" "$previous"
 node wiki/scripts/source-lock.mjs check local-server-observability "$RUNNER_TEMP/previous-portal"
 node infra/scripts/published-docs.mjs portal wiki
+node infra/scripts/operations-docs.mjs portal wiki
 node wiki/scripts/source-lock.mjs update local-server-observability portal
 (cd wiki && npm ci && npm run build)
 git -C wiki config user.name 'Observability publishing pipeline'

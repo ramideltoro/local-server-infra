@@ -1,3 +1,6 @@
+import { createTelemetry, startTelemetry } from "./telemetry.mjs";
+const telemetry = createTelemetry();
+const telemetryServer = startTelemetry(telemetry, Number(process.env.TELEMETRY_PORT || 8791));
 import http from "node:http";
 import os from "node:os";
 import { randomUUID } from "node:crypto";
@@ -729,11 +732,13 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === "POST" && url.pathname === "/review") {
+    if (isAuthorized(req)) telemetry.begin("review", res);
     await handleReview(req, res);
     return;
   }
 
   if (req.method === "POST" && url.pathname === "/translate") {
+    if (isAuthorized(req)) telemetry.begin("translate", res);
     await handleTranslate(req, res);
     return;
   }
@@ -754,4 +759,8 @@ server.listen(PORT, "127.0.0.1", () => {
       startedAt: SERVICE_STARTED_AT,
     }),
   );
+});
+
+for (const signal of ["SIGTERM", "SIGINT"]) process.on(signal, () => {
+  server.close(() => telemetryServer.close(() => process.exit(0)));
 });
