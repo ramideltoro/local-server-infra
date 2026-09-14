@@ -104,6 +104,11 @@
             scrape_interval = "60s"
             forward_to = [prometheus.remote_write.metrics_service.receiver]
           }
+          prometheus.scrape "qwen_workload" {
+            targets = [{"__address__" = "127.0.0.1:8791", "instance" = "chingadera", "job" = "qwen-production"}]
+            scrape_interval = "60s"
+            forward_to = [prometheus.remote_write.metrics_service.receiver]
+          }
           loki.source.journal "local_server_services" {
             max_age = "1h"
             labels = {"instance" = "chingadera", "job" = "local-server-services"}

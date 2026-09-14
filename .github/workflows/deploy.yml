@@ -173,7 +173,20 @@ jobs:
           GRAFANA_SERVICE_ACCOUNT_TOKEN: ${{ secrets.GRAFANA_SERVICE_ACCOUNT_TOKEN }}
           PROMETHEUS_UID: ${{ secrets.PROMETHEUS_UID }}
         run: node infra/scripts/verify-mookie.mjs
+      - name: Add Qwen workload instrumentation after idle compatibility gate
+        if: env.OPERATION == 'deploy' || env.OPERATION == 'restore'
+        run: |
+          tar -czf /tmp/qwen-telemetry.tar.gz -C infra/services/local-ai server.mjs telemetry.mjs
+          scp /tmp/qwen-telemetry.tar.gz infra/scripts/instrument-qwen.sh localserver.ramideltoro.com:/tmp/
+          ssh localserver.ramideltoro.com 'sudo mkdir -p /var/lib/local-server-infra/qwen-incoming && sudo tar -xzf /tmp/qwen-telemetry.tar.gz -C /var/lib/local-server-infra/qwen-incoming && sudo bash /tmp/instrument-qwen.sh /var/lib/local-server-infra/qwen-incoming'
+          node infra/scripts/qwen-check.mjs
+          node infra/scripts/worker-probe.mjs
+      - name: Validate operational storage and evidence before presentation
+        if: env.OPERATION == 'deploy' || env.OPERATION == 'restore'
+        run: |
+          ssh localserver.ramideltoro.com "sudo -u observability bash -c 'set -a; . /etc/local-server-observability/runtime.env; node /opt/local-server-observability/releases/$PORTAL_SHA/server/operations-preflight.mjs'"
       - name: Activate and verify
+        id: activation
         if: env.OPERATION == 'deploy' || env.OPERATION == 'restore'
         run: |
           scp infra/scripts/activate.sh localserver.ramideltoro.com:/tmp/local-server-activate.sh
@@ -184,6 +197,12 @@ jobs:
           curl -fsS --retry 5 --retry-delay 3 https://observe.ramideltoro.com/healthz | jq -e '.ok'
           curl -fsS https://localserver.wiki.ramideltoro.com/technical/qwen/ > /dev/null
           printf '### Verified release\n\nInfrastructure: `%s`\n\nPortal: `%s`\n\nWiki: `%s`\n\nProduction Qwen inference passed before and after deployment.\n' "$GITHUB_SHA" "$PORTAL_SHA" "$WIKI_SHA" >> "$GITHUB_STEP_SUMMARY"
+      - name: Initialize health history and verify collection
+        if: env.OPERATION == 'deploy' || env.OPERATION == 'restore'
+        run: |
+          ssh localserver.ramideltoro.com 'sudo -u observability bash -c "set -a; . /etc/local-server-observability/runtime.env; node /opt/local-server-observability/current/server/operations-history.mjs; node /opt/local-server-observability/current/server/operations-daily.mjs"'
+          expected=$(node -p 'JSON.parse(require("fs").readFileSync("portal/config/operations.json")).systems.length')
+          curl -fsS --retry 5 --retry-delay 5 https://observe.ramideltoro.com/api/public/operations/health | jq -e --argjson expected "$expected" '.at != null and (.systems | length == $expected) and (.systems | any(.coverage > 0))'
       - name: Synchronize native dashboards
         if: env.OPERATION == 'deploy' || env.OPERATION == 'restore'
         run: |
@@ -200,6 +219,16 @@ jobs:
           GRAFANA_SERVICE_ACCOUNT_TOKEN: ${{ secrets.GRAFANA_SERVICE_ACCOUNT_TOKEN }}
           PROMETHEUS_UID: ${{ secrets.PROMETHEUS_UID }}
         run: node infra/scripts/alerts.mjs
+      - name: Record failed activation and rollback attempt
+        if: failure() && steps.activation.outcome == 'failure'
+        run: |
+          scp infra/services/workspace/record-event.mjs localserver.ramideltoro.com:/tmp/observe-record-event.mjs
+          ssh localserver.ramideltoro.com "sudo -u observability node /tmp/observe-record-event.mjs automatic-rollback failure $GITHUB_RUN_ID $GITHUB_SHA"
+      - name: Record successful deployment or rollback
+        if: success() && (env.OPERATION == 'deploy' || env.OPERATION == 'restore' || env.OPERATION == 'rollback')
+        run: |
+          scp infra/services/workspace/record-event.mjs localserver.ramideltoro.com:/tmp/observe-record-event.mjs
+          ssh localserver.ramideltoro.com "sudo -u observability node /tmp/observe-record-event.mjs $OPERATION success $GITHUB_RUN_ID $GITHUB_SHA"
       - name: Clean temporary credentials
         if: always()
         run: rm -f "$RUNNER_TEMP/portal.env" "$HOME/.ssh/local-server"

@@ -38,3 +38,9 @@ Google-authenticated manual dispatch and validated dashboard publishing use the 
 
 ### Mookie enrollment
 Deploy also reconciles `ansible/mookie.yml` through the local-server SSH jump host. The verified address/key live in `config/mookie.json`; credentials are GitHub secrets `MOOKIE_SERVER_PASSWORD` and `MOOKIE_TELEMETRY_ENV`. Alloy collects resources, service state/restarts, and private journal logs with bounded CPU/RAM. A minute timer supplies Pi temperature, power/throttle flags and freshness. No backup or application deployment is implied by enrollment. See the [Mookie wiki](https://localserver.wiki.ramideltoro.com/technical/mookie/).
+
+## Operational health workspace
+
+The portal provides explainable 0–100 verified health and coverage for every canonical system, deployment events, dependencies, objectives, Qwen workload telemetry, capacity estimates, incidents, recovery readiness, command search, owner favorites, and shared time ranges. Missing evidence remains visible and reduces verified health. Minute collection and daily 09:00 UTC inspection preserve history in an additive SQLite database with encrypted backup verification.
+
+See the [health guide](https://localserver.wiki.ramideltoro.com/technical/verified-health/), [workspace guide](https://localserver.wiki.ramideltoro.com/technical/operational-workspace/), and [storage recovery guide](https://localserver.wiki.ramideltoro.com/expert/operational-storage/) for scoring, scope, limitations, and recovery. Google authentication protects all changes; deployment remains GitHub-managed. Qwen instrumentation preserves production routing and uses an idle-gated wrapper upgrade with compatibility checks.

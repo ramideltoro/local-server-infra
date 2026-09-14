@@ -34,6 +34,9 @@ jobs:
       - name: Inspect and synchronize through Git-managed jobs
         run: |
           ssh localserver.ramideltoro.com 'sudo bash -c "set -a; . /etc/local-server-observability/runtime.env; INSPECTION_TRIGGER=${{ github.event_name }} node /opt/local-server-infra/workspace/inspect.mjs; node /opt/local-server-infra/workspace/sync.mjs; chown -R observe-public:observe-public /var/lib/local-server-observability/grafana-public; chown -R observability:observability /var/lib/local-server-observability/grafana-owner; chown observability:observability /var/lib/local-server-observability/state.json /var/lib/local-server-observability/catalog.json"'
+      - name: Import bounded history and calculate capacity forecasts
+        run: |
+          ssh localserver.ramideltoro.com 'sudo -u observability bash -c "set -a; . /etc/local-server-observability/runtime.env; node /opt/local-server-observability/current/server/operations-history.mjs; node /opt/local-server-observability/current/server/operations-daily.mjs"'
       - name: Encrypt reports and verify restoration
         run: |
           umask 077
@@ -53,13 +56,27 @@ jobs:
           node services/workspace/backup.mjs decrypt "$RUNNER_TEMP/owner.enc" "$RUNNER_TEMP/owner-restored.db"
           cmp "$RUNNER_TEMP/owner.db" "$RUNNER_TEMP/owner-restored.db"
           test "$(sqlite3 "$RUNNER_TEMP/owner-restored.db" 'PRAGMA integrity_check;')" = ok
+      - name: Back up operational history and verify SQLite restoration
+        run: |
+          umask 077
+          ssh localserver.ramideltoro.com 'sudo sqlite3 /var/lib/local-server-observability/operations.db ".backup /var/lib/local-server-infra/backups/operations-snapshot.db" && sudo cat /var/lib/local-server-infra/backups/operations-snapshot.db && sudo rm /var/lib/local-server-infra/backups/operations-snapshot.db' > "$RUNNER_TEMP/operations.db"
+          node services/workspace/backup.mjs encrypt "$RUNNER_TEMP/operations.db" "$RUNNER_TEMP/operations.enc"
+          node services/workspace/backup.mjs decrypt "$RUNNER_TEMP/operations.enc" "$RUNNER_TEMP/operations-restored.db"
+          cmp "$RUNNER_TEMP/operations.db" "$RUNNER_TEMP/operations-restored.db"
+          test "$(sqlite3 "$RUNNER_TEMP/operations-restored.db" 'PRAGMA integrity_check;')" = ok
+          sqlite3 -json "$RUNNER_TEMP/operations-restored.db" 'SELECT * FROM daily' > "$RUNNER_TEMP/health-daily.json"
+          sqlite3 -json "$RUNNER_TEMP/operations-restored.db" 'SELECT * FROM transitions' > "$RUNNER_TEMP/incident-transitions.json"
+          tar -czf "$RUNNER_TEMP/operations-summary.tar.gz" -C "$RUNNER_TEMP" health-daily.json incident-transitions.json
+          node services/workspace/backup.mjs encrypt "$RUNNER_TEMP/operations-summary.tar.gz" "$RUNNER_TEMP/operations-summary-$(date -u +%Y%m%dT%H%M%S).enc"
+          gh release upload issue-history "$RUNNER_TEMP"/operations-summary-*.enc --repo "$GITHUB_REPOSITORY"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: encrypted-report-evidence-${{ github.run_id }}
           path: |
             ${{ runner.temp }}/reports.enc
             ${{ runner.temp }}/owner.enc
+            ${{ runner.temp }}/operations.enc
           retention-days: 90
       - name: Clean plaintext and credentials
         if: always()
-        run: rm -f "$RUNNER_TEMP/state.json" "$RUNNER_TEMP/restored.json" "$RUNNER_TEMP/summary.json" "$RUNNER_TEMP/owner.db" "$RUNNER_TEMP/owner-restored.db" "$HOME/.ssh/local-server"
+        run: rm -f "$RUNNER_TEMP/state.json" "$RUNNER_TEMP/restored.json" "$RUNNER_TEMP/summary.json" "$RUNNER_TEMP/owner.db" "$RUNNER_TEMP/owner-restored.db" "$HOME/.ssh/local-server" "$RUNNER_TEMP/operations.db" "$RUNNER_TEMP/operations-restored.db" "$RUNNER_TEMP/operations-summary.tar.gz" "$RUNNER_TEMP/health-daily.json" "$RUNNER_TEMP/incident-transitions.json"

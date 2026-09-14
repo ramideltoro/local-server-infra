@@ -36,6 +36,8 @@ export async function summarizeWithQwen(
     mode: "template",
     note: "Deterministic report published. Qwen was busy, unavailable, or did not provide a valid evidence-grounded summary.",
   };
+  let attempted = false,
+    started = Date.now();
   try {
     if (!(await idle())) return fallback;
     const evidence = report.checks
@@ -55,6 +57,8 @@ export async function summarizeWithQwen(
         mode: "template",
         note: "No deterministic findings require AI summarization.",
       };
+    attempted = true;
+    started = Date.now();
     const response = await request("http://127.0.0.1:11434/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -69,7 +73,8 @@ export async function summarizeWithQwen(
       }),
       signal: AbortSignal.timeout(60000),
     });
-    if (!response.ok) return fallback;
+    if (!response.ok)
+      return { ...fallback, attempted, durationMs: Date.now() - started };
     const result = JSON.parse((await response.json()).response);
     if (
       typeof result.summary !== "string" ||
@@ -78,15 +83,21 @@ export async function summarizeWithQwen(
       !result.evidenceIds.length ||
       result.evidenceIds.some((id) => !evidence.some((e) => e.id === id))
     )
-      return fallback;
+      return { ...fallback, attempted, durationMs: Date.now() - started };
     return {
       mode: "qwen",
+      attempted: true,
+      durationMs: Date.now() - started,
       note: "AI interpretation — possible causes are hypotheses, not verified diagnoses.",
       summary: result.summary,
       evidenceIds: result.evidenceIds,
       evidence,
     };
   } catch {
-    return fallback;
+    return {
+      ...fallback,
+      attempted,
+      durationMs: attempted ? Date.now() - started : 0,
+    };
   }
 }
