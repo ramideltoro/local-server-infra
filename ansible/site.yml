@@ -112,7 +112,7 @@
           loki.source.journal "local_server_services" {
             max_age = "1h"
             labels = {"instance" = "chingadera", "job" = "local-server-services"}
-            matches = "_SYSTEMD_UNIT=nutsnews-local-ai.service _SYSTEMD_UNIT=ollama.service _SYSTEMD_UNIT=local-server-observability.service"
+            matches = "_SYSTEMD_UNIT=nutsnews-local-ai.service _SYSTEMD_UNIT=ollama.service _SYSTEMD_UNIT=local-server-observability.service _SYSTEMD_UNIT=kubequest.service _SYSTEMD_UNIT=fantasy-qwen.service"
             forward_to = [loki.write.grafana_cloud_loki.receiver]
           }
         validate: /usr/bin/alloy validate %s

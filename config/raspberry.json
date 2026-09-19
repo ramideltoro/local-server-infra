@@ -1,0 +1,8 @@
+{
+  "host": "192.168.1.77",
+  "hostname": "rpi4.local",
+  "user": "piadmin",
+  "jumpHost": "localserver.ramideltoro.com",
+  "hostKey": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMo8kqtuf55NMdeADM1LVLP6cUwBYcNG39K8JFNyZekF",
+  "platform": "Debian 13 arm64, Raspberry Pi 4"
+}
