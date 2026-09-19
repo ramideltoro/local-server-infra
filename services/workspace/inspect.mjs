@@ -171,7 +171,7 @@ for (const server of inventory.servers) {
           const p = new URLSearchParams({
             query:
               (server.id === "raspberry"
-                ? '{project="raspberry",job="raspberry/journal"}'
+                ? '{instance="rpi4",project="raspberry"}'
                 : `{instance="${instances[server.id]}"}`) +
               ' |~ "(?i)error|fatal|panic|failed"',
             start: String(cursor),
@@ -216,7 +216,7 @@ for (const server of inventory.servers) {
         const p = new URLSearchParams({
           query:
             server.id === "raspberry"
-              ? '{project="raspberry",job="raspberry/journal"}'
+              ? '{instance="rpi4",project="raspberry"}'
               : `{instance="${instances[server.id]}"}`,
           start: String(stop - 300000000000n),
           end: String(stop),
