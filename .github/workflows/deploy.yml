@@ -38,7 +38,8 @@ jobs:
       - run: pipx install ansible-core==2.19.2
       - run: ansible-playbook --syntax-check -i ansible/inventory.ini ansible/site.yml
       - run: ansible-playbook --syntax-check -i "mookie," ansible/mookie.yml
-      - run: bash -n scripts/*.sh services/mookie/*.sh
+      - run: ansible-playbook --syntax-check -i "raspberry," ansible/raspberry.yml
+      - run: bash -n scripts/*.sh services/mookie/*.sh services/raspberry/*.sh
   manage:
     needs: validate
     if: github.event_name != 'pull_request'
@@ -166,6 +167,12 @@ jobs:
           MOOKIE_SERVER_PASSWORD: ${{ secrets.MOOKIE_SERVER_PASSWORD }}
           MOOKIE_TELEMETRY_ENV: ${{ secrets.MOOKIE_TELEMETRY_ENV }}
         run: bash infra/scripts/enroll-mookie.sh
+      - name: Enroll Raspberry receiver telemetry
+        if: env.OPERATION == 'deploy' || env.OPERATION == 'restore'
+        env:
+          RASPBERRY_PI_ADMIN_PASSWORD: ${{ secrets.RASPBERRY_PI_ADMIN_PASSWORD }}
+          RASPBERRY_TELEMETRY_ENV: ${{ secrets.RASPBERRY_TELEMETRY_ENV }}
+        run: bash infra/scripts/enroll-raspberry.sh
       - name: Verify Mookie Cloud telemetry
         if: env.OPERATION == 'deploy' || env.OPERATION == 'restore'
         env:

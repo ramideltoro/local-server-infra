@@ -1,0 +1,55 @@
+logging {
+  level = "warn"
+}
+prometheus.exporter.unix "raspberry" {
+  enable_collectors = ["systemd", "processes", "textfile"]
+  systemd {
+    enable_restarts = true
+    start_time = true
+    task_metrics = true
+    unit_include = ".+\\.service"
+  }
+  textfile {
+    directory = "/var/lib/raspberry-observability"
+  }
+}
+discovery.relabel "raspberry" {
+  targets = prometheus.exporter.unix.raspberry.targets
+  rule {
+    target_label = "instance"
+    replacement = "rpi4"
+  }
+  rule {
+    target_label = "job"
+    replacement = "integrations/node_exporter"
+  }
+}
+prometheus.scrape "raspberry" {
+  targets = discovery.relabel.raspberry.output
+  scrape_interval = "60s"
+  scrape_timeout = "10s"
+  forward_to = [prometheus.remote_write.cloud.receiver]
+}
+prometheus.remote_write "cloud" {
+  endpoint {
+    url = sys.env("METRICS_URL")
+    basic_auth {
+      username = sys.env("METRICS_USER")
+      password = sys.env("CLOUD_WRITE_TOKEN")
+    }
+  }
+}
+loki.source.journal "raspberry" {
+  max_age = "1h"
+  labels = {instance = "rpi4", project = "raspberry", job = "raspberry/journal"}
+  forward_to = [loki.write.cloud.receiver]
+}
+loki.write "cloud" {
+  endpoint {
+    url = sys.env("LOGS_URL")
+    basic_auth {
+      username = sys.env("LOGS_USER")
+      password = sys.env("CLOUD_WRITE_TOKEN")
+    }
+  }
+}

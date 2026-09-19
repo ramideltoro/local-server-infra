@@ -176,6 +176,15 @@ rules.push(...[
     "1m"
   ]
 ]);
+rules.push(
+ ["raspberry-metrics-missing","Raspberry telemetry missing",'absent_over_time(raspberry_collector_timestamp_seconds{instance="rpi4"}[5m])',"gt",0,"1m"],
+ ["raspberry-temperature","Raspberry temperature high",'max(raspberry_temperature_celsius{instance="rpi4"})',"gt",80,"5m"],
+ ["raspberry-throttling","Raspberry throttling or undervoltage",'max({__name__=~"raspberry_(undervoltage|throttled)",instance="rpi4"})',"gt",0,"5m"],
+ ["raspberry-services","Raspberry receiver service unavailable",'min(node_systemd_unit_state{instance="rpi4",name=~"(lighttpd|tar1090|airplanes-feed|airplanes-mlat)\\.service",state="active"})',"lt",1,"3m"],
+ ["kubequest-health","KubeQuest unavailable",'min(local_application_health{application="kubequest"})',"lt",1,"3m"],
+ ["kubequest-labs","KubeQuest lab runtime unavailable",'min(local_application_capability{application="kubequest",capability="labs"})',"lt",1,"5m"],
+ ["fantasy-qwen-health","Fantasy inference unavailable",'min(local_application_health{application="fantasy-qwen"})',"lt",1,"5m"]
+);
 for (const [uid, title, expr, op, threshold, duration] of rules) {
   const body = {
     uid,
@@ -191,8 +200,8 @@ for (const [uid, title, expr, op, threshold, duration] of rules) {
       runbook_url: "https://localserver.wiki.ramideltoro.com/technical/alerts/",
     },
     labels: {
-      application: uid.startsWith("mookie-") ? "mookie" : "local-server",
-      server: uid.startsWith("mookie-") ? "mookie" : "local",
+      application: uid.startsWith("raspberry-") ? "raspberry-receiver" : uid.startsWith("kubequest-") ? "kubequest" : uid.startsWith("fantasy-qwen-") ? "fantasy-qwen" : uid.startsWith("mookie-") ? "mookie" : "local-server",
+      server: uid.startsWith("raspberry-") ? "raspberry" : uid.startsWith("mookie-") ? "mookie" : "local",
       severity: "warning",
       managed_by: "local-server-infra",
     },
