@@ -1,3 +1,4 @@
+import { logSelector } from "./log-scope.mjs";
 import { inspectionWindow } from "./window.mjs";
 import { summarizeWithQwen } from "./summarize.mjs";
 import fs from "node:fs/promises";
@@ -170,9 +171,7 @@ for (const server of inventory.servers) {
         while (pages++ < 10) {
           const p = new URLSearchParams({
             query:
-              (server.id === "raspberry"
-                ? '{instance="rpi4",project="raspberry"}'
-                : `{instance="${instances[server.id]}"}`) +
+              logSelector(server.id, instances[server.id]) +
               ' |~ "(?i)error|fatal|panic|failed"',
             start: String(cursor),
             end: String(stop),
@@ -215,9 +214,7 @@ for (const server of inventory.servers) {
         // An empty error stream does not prove the underlying log source is present.
         const p = new URLSearchParams({
           query:
-            server.id === "raspberry"
-              ? '{instance="rpi4",project="raspberry"}'
-              : `{instance="${instances[server.id]}"}`,
+            logSelector(server.id, instances[server.id]),
           start: String(stop - 300000000000n),
           end: String(stop),
           limit: "1",
