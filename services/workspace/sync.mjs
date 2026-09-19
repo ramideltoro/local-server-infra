@@ -5,7 +5,7 @@ const root =
 const dir = process.env.DATA_DIR || "/var/lib/local-server-observability";
 const { presentation } = await import(root + "/server/presentation.mjs");
 const { publicMetrics } = await import(root + "/server/core.mjs");
-const { registeredQueries, queryKey } = await import(
+const { registeredQueries, queryKey, fixedQuery } = await import(
   root + "/server/gateway.mjs"
 );
 const base = process.env.GRAFANA_URL.replace(/\/$/, "");
@@ -236,7 +236,8 @@ for (const d of legacy)
       }),
       { mode: 0o600 },
     );
-    if (d.application === "mookie") {
+    const nativeOwner = d.application === "mookie" || /^(kubequest|fantasy-qwen|raspberry-receiver|nutsnews-(scheduler|fetcher|canonicalizer|enrichment|approval|translation|persistence|publication|rabbitmq)|local-wiki|nutsnews-wiki)/.test(d.application);
+    if (nativeOwner) {
       const privatePanels = d.panels.map((p, i) => ({
         id: i + 1,
         title: p.title,
@@ -245,12 +246,13 @@ for (const d of legacy)
         datasource: { type: "prometheus", uid: process.env.PROMETHEUS_UID },
         targets: p.queries.map((expr, n) => ({
           refId: String.fromCharCode(65 + n),
-          expr,
+          expr: fixedQuery(expr, d.application),
           datasource: { type: "prometheus", uid: process.env.PROMETHEUS_UID },
         })),
         ...presentation("timeseries", p.unit),
       }));
-      privatePanels.push({
+      const logInstance = d.application === "mookie" ? "mookie" : d.application === "raspberry-receiver" ? "rpi4" : ["kubequest", "fantasy-qwen"].includes(d.application) ? "chingadera" : /^nutsnews-(scheduler|fetcher|canonicalizer|enrichment|approval|translation|persistence|publication|rabbitmq)$/.test(d.application) ? "backend.nutsnews.com" : null;
+      if (logInstance) privatePanels.push({
         id: 100,
         title: "Private journal logs",
         type: "logs",
@@ -259,7 +261,7 @@ for (const d of legacy)
         targets: [
           {
             refId: "A",
-            expr: '{instance="mookie"}',
+            expr: `{instance="${logInstance}"}`,
             datasource: { type: "loki", uid: process.env.LOKI_UID },
           },
         ],
@@ -290,8 +292,8 @@ for (const d of legacy)
       limitation:
         "Approved metric queries, fixed server scope, anonymous series labels",
       ownerPath:
-        d.application === "mookie"
-          ? "/owner/grafana/d/mookie-server/view"
+        nativeOwner
+          ? "/owner/grafana/d/" + d.id + "/view"
           : "/owner/?legacy=1#" + d.application,
     });
   }
