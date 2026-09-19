@@ -236,7 +236,7 @@ for (const d of legacy)
       }),
       { mode: 0o600 },
     );
-    const nativeOwner = d.application === "mookie" || /^(kubequest|fantasy-qwen|raspberry-receiver|nutsnews-(scheduler|fetcher|canonicalizer|enrichment|approval|translation|persistence|publication|rabbitmq)|local-wiki|nutsnews-wiki)/.test(d.application);
+    const nativeOwner = d.application === "mookie" || /^(kubequest|fantasy-qwen|raspberry-receiver|nutsnews-(scheduler|fetcher|canonicalizer|enrichment|approval|translation|persistence|publication|rabbitmq|cloud-workers)|local-wiki|nutsnews-wiki)/.test(d.application);
     if (nativeOwner) {
       const privatePanels = d.panels.map((p, i) => ({
         id: i + 1,
@@ -251,7 +251,7 @@ for (const d of legacy)
         })),
         ...presentation("timeseries", p.unit),
       }));
-      const logInstance = d.application === "mookie" ? "mookie" : d.application === "raspberry-receiver" ? "rpi4" : ["kubequest", "fantasy-qwen"].includes(d.application) ? "chingadera" : /^nutsnews-(scheduler|fetcher|canonicalizer|enrichment|approval|translation|persistence|publication|rabbitmq)$/.test(d.application) ? "backend.nutsnews.com" : null;
+      const logInstance = d.application === "mookie" ? "mookie" : d.application === "raspberry-receiver" ? "rpi4" : ["kubequest", "fantasy-qwen"].includes(d.application) ? "chingadera" : /^nutsnews-(scheduler|fetcher|canonicalizer|enrichment|approval|translation|persistence|publication|rabbitmq|cloud-workers)$/.test(d.application) ? "backend.nutsnews.com" : null;
       if (logInstance) privatePanels.push({
         id: 100,
         title: "Private journal logs",
