@@ -20,6 +20,14 @@
         - "{{ portal_root }}/releases"
         - /etc/local-server-observability
         - /var/lib/local-server-infra
+    - name: Install hardware recovery and crash evidence configuration
+      ansible.builtin.copy:
+        src: ../scripts/host-recovery.sh
+        dest: /usr/local/sbin/local-server-host-recovery
+        owner: root
+        group: root
+        mode: "0755"
+      notify: Configure host recovery
     - name: Create unprivileged portal user
       ansible.builtin.user:
         name: observability
@@ -118,6 +126,9 @@
         validate: /usr/bin/alloy validate %s
       notify: Restart Alloy
   handlers:
+    - name: Configure host recovery
+      ansible.builtin.command: /usr/local/sbin/local-server-host-recovery
+      when: not ansible_check_mode
     - name: Reload systemd
       ansible.builtin.systemd_service:
         daemon_reload: true
