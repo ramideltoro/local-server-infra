@@ -36,7 +36,7 @@ try{
   await ready('http://127.0.0.1:11434/api/tags');const answer=await(await get('http://127.0.0.1:11434/api/generate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model,prompt:'Respond with the single word READY.',stream:false,keep_alive:0,options:{num_ctx:512,num_predict:8,num_thread:2,temperature:0}})})).json();assert(answer.done&&answer.response.trim().length&&answer.eval_count>0,'Actual isolated inference required');
   if(id==='qwen'){start('node',['server.mjs'],{PORT:'8788',TELEMETRY_PORT:'8791',OLLAMA_URL:'http://127.0.0.1:11434',OLLAMA_MODEL:model,LOCAL_AI_API_KEY:'isolated-only'},'/work/app');await ready('http://127.0.0.1:8788/health');}
   }else if(['nutsnews-backend','fantasy','nutsnews-cloud-workers'].includes(id)){
-  const pg='/usr/lib/postgresql/18/bin/';execute(pg+'initdb',['-D','/work/pgdata','-A','trust','--no-locale']);
+  const pg='/usr/lib/postgresql/18/bin/';execute(pg+'initdb',['-D','/work/pgdata','-A','trust','--no-locale','--encoding=UTF8']);
   const postgres=start(pg+'postgres',['-D','/work/pgdata','-k','/tmp','-h','127.0.0.1','-p','55432']);
   for(let i=0;i<60;i++){try{execute(pg+'pg_isready',['-h','127.0.0.1','-p','55432']);break;}catch{await new Promise(r=>setTimeout(r,250));}}
   execute(pg+'createdb',['-h','127.0.0.1','-p','55432','restore']);
