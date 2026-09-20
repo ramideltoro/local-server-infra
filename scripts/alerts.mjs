@@ -1,3 +1,4 @@
+import { retireMookieAlerts } from './retired-alerts.mjs';
 const e = process.env,
   base = e.GRAFANA_URL?.replace(/\/$/, "");
 async function api(p, method = "GET", body) {
@@ -10,7 +11,7 @@ async function api(p, method = "GET", body) {
     },
     body: body ? JSON.stringify(body) : undefined,
   });
-  if (!r.ok) throw Error(`Grafana ${method} ${p}: ${r.status}`);
+  if (!r.ok) throw Object.assign(Error(`Grafana ${method} ${p}: ${r.status}`), {status:r.status});
   return r.status === 204 ? {} : r.json();
 }
 const folder = "local-server-central";
@@ -94,88 +95,7 @@ const rules = [
     "15m",
   ],
 ];
-rules.push(...[
-  [
-    "mookie-cpu",
-    "Mookie CPU utilization",
-    "100*(1-avg(rate(node_cpu_seconds_total{instance=\"mookie\",mode=\"idle\"}[5m])))",
-    "gt",
-    90,
-    "10m"
-  ],
-  [
-    "mookie-memory",
-    "Mookie Memory used",
-    "100*(1-max(node_memory_MemAvailable_bytes{instance=\"mookie\"})/max(node_memory_MemTotal_bytes{instance=\"mookie\"}))",
-    "gt",
-    90,
-    "10m"
-  ],
-  [
-    "mookie-disk",
-    "Mookie Root disk used",
-    "100*(1-max(node_filesystem_avail_bytes{instance=\"mookie\",mountpoint=\"/\"})/max(node_filesystem_size_bytes{instance=\"mookie\",mountpoint=\"/\"}))",
-    "gt",
-    85,
-    "5m"
-  ],
-  [
-    "mookie-temperature",
-    "Mookie CPU temperature",
-    "max(mookie_temperature_celsius{instance=\"mookie\"})",
-    "gt",
-    80,
-    "5m"
-  ],
-  [
-    "mookie-undervoltage",
-    "Mookie Undervoltage now",
-    "max(mookie_undervoltage{instance=\"mookie\"})",
-    "gt",
-    0,
-    "5m"
-  ],
-  [
-    "mookie-throttled",
-    "Mookie Thermal throttling now",
-    "max(mookie_throttled{instance=\"mookie\"})",
-    "gt",
-    0,
-    "5m"
-  ],
-  [
-    "mookie-services-failed",
-    "Mookie Failed services",
-    "sum(node_systemd_unit_state{instance=\"mookie\",state=\"failed\"})",
-    "gt",
-    0,
-    "5m"
-  ],
-  [
-    "mookie-restarts",
-    "Mookie Service restarts over 1 hour",
-    "sum(increase(node_systemd_service_restart_total{instance=\"mookie\"}[1h]))",
-    "gt",
-    3,
-    "5m"
-  ],
-  [
-    "mookie-telemetry-age",
-    "Mookie Hardware telemetry age",
-    "time()-max(mookie_collector_timestamp_seconds{instance=\"mookie\"})",
-    "gt",
-    180,
-    "5m"
-  ],
-  [
-    "mookie-metrics-missing",
-    "Mookie telemetry missing",
-    "absent_over_time(mookie_collector_timestamp_seconds{instance=\"mookie\"}[5m])",
-    "gt",
-    0,
-    "1m"
-  ]
-]);
+await retireMookieAlerts(api);
 rules.push(
  ["raspberry-metrics-missing","Raspberry telemetry missing",'absent_over_time(raspberry_collector_timestamp_seconds{instance="rpi4"}[5m])',"gt",0,"1m"],
  ["raspberry-temperature","Raspberry temperature high",'max(raspberry_temperature_celsius{instance="rpi4"})',"gt",80,"5m"],

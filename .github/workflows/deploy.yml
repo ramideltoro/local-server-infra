@@ -161,25 +161,12 @@ jobs:
       - name: Apply host configuration
         if: env.OPERATION == 'deploy' || env.OPERATION == 'restore'
         run: ansible-playbook -i infra/ansible/inventory.ini infra/ansible/site.yml
-      - name: Enroll Mookie server telemetry
-        if: env.OPERATION == 'deploy' || env.OPERATION == 'restore'
-        env:
-          MOOKIE_SERVER_PASSWORD: ${{ secrets.MOOKIE_SERVER_PASSWORD }}
-          MOOKIE_TELEMETRY_ENV: ${{ secrets.MOOKIE_TELEMETRY_ENV }}
-        run: bash infra/scripts/enroll-mookie.sh
       - name: Enroll Raspberry receiver telemetry
         if: env.OPERATION == 'deploy' || env.OPERATION == 'restore'
         env:
           RASPBERRY_PI_ADMIN_PASSWORD: ${{ secrets.RASPBERRY_PI_ADMIN_PASSWORD }}
           RASPBERRY_TELEMETRY_ENV: ${{ secrets.RASPBERRY_TELEMETRY_ENV }}
         run: bash infra/scripts/enroll-raspberry.sh
-      - name: Verify Mookie Cloud telemetry
-        if: env.OPERATION == 'deploy' || env.OPERATION == 'restore'
-        env:
-          GRAFANA_URL: ${{ secrets.GRAFANA_URL }}
-          GRAFANA_SERVICE_ACCOUNT_TOKEN: ${{ secrets.GRAFANA_SERVICE_ACCOUNT_TOKEN }}
-          PROMETHEUS_UID: ${{ secrets.PROMETHEUS_UID }}
-        run: node infra/scripts/verify-mookie.mjs
       - name: Add Qwen workload instrumentation after idle compatibility gate
         if: env.OPERATION == 'deploy' || env.OPERATION == 'restore'
         run: |
