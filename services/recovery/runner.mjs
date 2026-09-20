@@ -6,6 +6,7 @@ import * as staticSites from './static.mjs';
 import * as localApps from './local.mjs';
 import * as backendApps from './backend.mjs';
 import * as netlifyApps from './netlify.mjs';
+import * as firebaseApps from './firebase.mjs';
 import * as workers from './workers.mjs';
 const tools=path.dirname(fileURLToPath(import.meta.url));
 const credentials=await envFile('/etc/observe-recovery/credentials.env');
@@ -17,16 +18,16 @@ await fs.mkdir(base+'/public',{recursive:true,mode:0o755});
 await fs.chmod(base,0o711);
 let evidence;try{evidence=JSON.parse(await fs.readFile(base+'/public/evidence.json','utf8'));}catch{evidence={version:1,systems:{}};}
 const selected=process.argv.slice(2).filter(a=>!a.startsWith('--'));
-const ids=selected.length?selected:[...Object.keys(staticSites.sites),...localApps.ids,...backendApps.ids,...netlifyApps.ids,...workers.ids];
+const ids=selected.length?selected:[...Object.keys(staticSites.sites),...localApps.ids,...backendApps.ids,...netlifyApps.ids,...firebaseApps.ids,...workers.ids];
 async function publish(){const tmp=base+'/public/evidence.tmp';await json(tmp,evidence);await fs.chmod(tmp,0o644);await fs.rename(tmp,base+'/public/evidence.json');}
 // Re-probe deployment identities between serialized drills so long weekly runs
 // cannot let earlier applications' current-revision observations expire.
 async function refreshDeployments(){
-for(const id of ids){evidence.systems[id]??={};const provider=staticSites.sites[id]?staticSites:backendApps.ids.includes(id)?backendApps:netlifyApps.ids.includes(id)?netlifyApps:workers.ids.includes(id)?workers:localApps;try{evidence.systems[id].revision=await provider.revision(id,credentials.GITHUB_TOKEN);evidence.systems[id].observedAt=new Date().toISOString();}catch{evidence.systems[id].revision=null;}}
+for(const id of ids){evidence.systems[id]??={};const provider=staticSites.sites[id]?staticSites:backendApps.ids.includes(id)?backendApps:netlifyApps.ids.includes(id)?netlifyApps:firebaseApps.ids.includes(id)?firebaseApps:workers.ids.includes(id)?workers:localApps;try{evidence.systems[id].revision=await provider.revision(id,credentials.GITHUB_TOKEN);evidence.systems[id].observedAt=new Date().toISOString();}catch{evidence.systems[id].revision=null;}}
 await publish();
 }
 await run('rclone',['copyto','/etc/observe-recovery/key',cloud+'/keys/'+keyId+'.key'],{env:cloudEnv});
-for(const id of ids){const provider=staticSites.sites[id]?staticSites:backendApps.ids.includes(id)?backendApps:netlifyApps.ids.includes(id)?netlifyApps:workers.ids.includes(id)?workers:localApps;if(!staticSites.sites[id]&&!localApps.ids.includes(id)&&!backendApps.ids.includes(id)&&!netlifyApps.ids.includes(id)&&!workers.ids.includes(id))throw Error('Unknown application');
+for(const id of ids){const provider=staticSites.sites[id]?staticSites:backendApps.ids.includes(id)?backendApps:netlifyApps.ids.includes(id)?netlifyApps:firebaseApps.ids.includes(id)?firebaseApps:workers.ids.includes(id)?workers:localApps;if(!staticSites.sites[id]&&!localApps.ids.includes(id)&&!backendApps.ids.includes(id)&&!netlifyApps.ids.includes(id)&&!firebaseApps.ids.includes(id)&&!workers.ids.includes(id))throw Error('Unknown application');
  const previous=evidence.systems[id]||{};let revision;
  try{revision=await provider.revision(id,credentials.GITHUB_TOKEN);evidence.systems[id]={...previous,revision,observedAt:new Date().toISOString()};await publish();}catch{evidence.systems[id]={...previous,revision:null,observedAt:new Date().toISOString()};await publish();console.log(id+': deployment unavailable');continue;}
  if(!process.argv.includes('--force')&&previous.restore?.testedRevision===revision&&Date.now()-Date.parse(previous.restore.verifiedAt)<(previous.restore.outcome==='pass'?7*86400000:6*3600000))continue;
