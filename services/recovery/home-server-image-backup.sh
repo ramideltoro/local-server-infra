@@ -118,11 +118,17 @@ tar \
   --xattrs-include='*' \
   --one-file-system \
   --exclude='./srv/home-server-backups' \
+  --exclude='./proc' \
+  --exclude='./sys' \
+  --exclude='./dev' \
+  --exclude='./run' \
+  --exclude='./var/log/journal' \
+  --exclude='./var/lib/observe-recovery/staging' \
   --exclude='./tmp' \
   --exclude='./var/tmp' \
   --exclude='./var/cache/apt/archives' \
   -cpf - \
-  -C / . | zstd -T0 -15 -o "$BACKUP_DIR/root/nvme0n1p2-root.tar.zst"
+  -C / . | zstd -T2 -6 -o "$BACKUP_DIR/root/nvme0n1p2-root.tar.zst"
 
 sha256sum "$BACKUP_DIR/root/nvme0n1p2-root.tar.zst" > "$BACKUP_DIR/root/SHA256SUMS"
 

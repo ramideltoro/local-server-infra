@@ -1,0 +1,3 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {emptyQueues} from '../services/recovery/workers.mjs';
+const empty='name\tmessages\n'+['fetch','canonicalization','enrichment','approval','persistence','publication'].map(s=>'nutsnews.worker.'+s+'.v1\t0').join('\n');
+test('all required queues must be present and empty',()=>{assert.equal(emptyQueues(empty+'\nworker.uplift.canary.v1\t0'),7);for(const bad of ['',empty.replace('fetch.v1\t0','fetch.v1\t1'),empty.replace('fetch.v1\t0','fetch.v1\tunknown'),empty.replace('nutsnews.worker.fetch.v1\t0',''),empty+'\nother.queue\t1',empty+'\nError: unavailable'])assert.throws(()=>emptyQueues(bad));});

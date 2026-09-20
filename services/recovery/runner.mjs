@@ -6,6 +6,7 @@ import * as staticSites from './static.mjs';
 import * as localApps from './local.mjs';
 import * as backendApps from './backend.mjs';
 import * as netlifyApps from './netlify.mjs';
+import * as workers from './workers.mjs';
 const tools=path.dirname(fileURLToPath(import.meta.url));
 const credentials=await envFile('/etc/observe-recovery/credentials.env');
 const key=await fs.readFile('/etc/observe-recovery/key');
@@ -16,10 +17,16 @@ await fs.mkdir(base+'/public',{recursive:true,mode:0o755});
 await fs.chmod(base,0o711);
 let evidence;try{evidence=JSON.parse(await fs.readFile(base+'/public/evidence.json','utf8'));}catch{evidence={version:1,systems:{}};}
 const selected=process.argv.slice(2).filter(a=>!a.startsWith('--'));
-const ids=selected.length?selected:[...Object.keys(staticSites.sites),...localApps.ids,...backendApps.ids,...netlifyApps.ids];
+const ids=selected.length?selected:[...Object.keys(staticSites.sites),...localApps.ids,...backendApps.ids,...netlifyApps.ids,...workers.ids];
 async function publish(){const tmp=base+'/public/evidence.tmp';await json(tmp,evidence);await fs.chmod(tmp,0o644);await fs.rename(tmp,base+'/public/evidence.json');}
+// Re-probe deployment identities between serialized drills so long weekly runs
+// cannot let earlier applications' current-revision observations expire.
+async function refreshDeployments(){
+for(const id of ids){evidence.systems[id]??={};const provider=staticSites.sites[id]?staticSites:backendApps.ids.includes(id)?backendApps:netlifyApps.ids.includes(id)?netlifyApps:workers.ids.includes(id)?workers:localApps;try{evidence.systems[id].revision=await provider.revision(id,credentials.GITHUB_TOKEN);evidence.systems[id].observedAt=new Date().toISOString();}catch{evidence.systems[id].revision=null;}}
+await publish();
+}
 await run('rclone',['copyto','/etc/observe-recovery/key',cloud+'/keys/'+keyId+'.key'],{env:cloudEnv});
-for(const id of ids){const provider=staticSites.sites[id]?staticSites:backendApps.ids.includes(id)?backendApps:netlifyApps.ids.includes(id)?netlifyApps:localApps;if(!staticSites.sites[id]&&!localApps.ids.includes(id)&&!backendApps.ids.includes(id)&&!netlifyApps.ids.includes(id))throw Error('Unknown application');
+for(const id of ids){const provider=staticSites.sites[id]?staticSites:backendApps.ids.includes(id)?backendApps:netlifyApps.ids.includes(id)?netlifyApps:workers.ids.includes(id)?workers:localApps;if(!staticSites.sites[id]&&!localApps.ids.includes(id)&&!backendApps.ids.includes(id)&&!netlifyApps.ids.includes(id)&&!workers.ids.includes(id))throw Error('Unknown application');
  const previous=evidence.systems[id]||{};let revision;
  try{revision=await provider.revision(id,credentials.GITHUB_TOKEN);evidence.systems[id]={...previous,revision,observedAt:new Date().toISOString()};await publish();}catch{evidence.systems[id]={...previous,revision:null,observedAt:new Date().toISOString()};await publish();console.log(id+': deployment unavailable');continue;}
  if(!process.argv.includes('--force')&&previous.restore?.testedRevision===revision&&Date.now()-Date.parse(previous.restore.verifiedAt)<(previous.restore.outcome==='pass'?7*86400000:6*3600000))continue;
@@ -49,8 +56,8 @@ for(const id of ids){const provider=staticSites.sites[id]?staticSites:backendApp
  // Private output is encrypted before cleanup; no raw DB, credentials or logs leave this tree.
  await json(work+'/evidence.json',result);await fs.mkdir(work+'/verification',{recursive:true});for(const name of ['manifest.json','deployment.json','source-backup.json','evidence.json','failure.json','result.json','application.log','init.log','postgres.log','restore.log']) { try { await fs.copyFile(work+'/'+name,work+'/verification/'+name); } catch(e) { if(e.code!=='ENOENT')throw e; } }const detail=work+'.tar';await run('tar',['cf',detail,'-C',work+'/verification','.'],{timeout:900000});await seal(detail,base+'/private/'+id+'-'+stamp+'.enc',key);await fs.rm(detail);await fs.rm(work,{recursive:true});
  console.log(id+': '+result.outcome+(failure?' ('+failure.message+')':''));
+ await refreshDeployments();
 }
 
-// Long weekly runs must finish with a fresh deployment observation for every result.
-for(const id of ids){const provider=staticSites.sites[id]?staticSites:backendApps.ids.includes(id)?backendApps:netlifyApps.ids.includes(id)?netlifyApps:localApps;try{evidence.systems[id].revision=await provider.revision(id,credentials.GITHUB_TOKEN);evidence.systems[id].observedAt=new Date().toISOString();}catch{evidence.systems[id].revision=null;}}
-await publish();
+
+await refreshDeployments();
