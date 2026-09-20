@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# An explicitly documented release needs no generated-catalog migration.
+if node wiki/scripts/source-lock.mjs check local-server-observability portal >/dev/null 2>&1; then
+  exit 0
+fi
 # Narrow exception: generated dashboard catalogs, never undocumented application changes.
 previous=$(curl -fsS --retry 2 --max-time 20 https://observe.ramideltoro.com/api/public/release | jq -r .portal) || exit 0
 [[ "$previous" =~ ^[a-f0-9]{40}$ ]] || exit 0
