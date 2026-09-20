@@ -35,19 +35,30 @@ try{
   start('/work/ollama',['serve'],{OLLAMA_HOST:'127.0.0.1:11434',OLLAMA_MODELS:'/work/models',OLLAMA_NUM_PARALLEL:'1',OLLAMA_MAX_LOADED_MODELS:'1',OLLAMA_CONTEXT_LENGTH:'512',CUDA_VISIBLE_DEVICES:'-1',ROCR_VISIBLE_DEVICES:'-1',OLLAMA_VULKAN:'0',OLLAMA_LLM_LIBRARY:'cpu',LD_LIBRARY_PATH:'/work/lib/ollama'});
   await ready('http://127.0.0.1:11434/api/tags');const answer=await(await get('http://127.0.0.1:11434/api/generate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model,prompt:'Respond with the single word READY.',stream:false,keep_alive:0,options:{num_ctx:512,num_predict:8,num_thread:2,temperature:0}})})).json();assert(answer.done&&answer.response.trim().length&&answer.eval_count>0,'Actual isolated inference required');
   if(id==='qwen'){start('node',['server.mjs'],{PORT:'8788',TELEMETRY_PORT:'8791',OLLAMA_URL:'http://127.0.0.1:11434',OLLAMA_MODEL:model,LOCAL_AI_API_KEY:'isolated-only'},'/work/app');await ready('http://127.0.0.1:8788/health');}
-  }else if(['nutsnews-backend','fantasy'].includes(id)){
-  const pg='/usr/lib/postgresql/18/bin/';execute(pg+'initdb',['-D','/work/pgdata','-A','trust','--no-locale']);
+  }else if(['nutsnews-backend','fantasy','nutsnews-cloud-workers'].includes(id)){
+  const pg='/usr/lib/postgresql/18/bin/';execute(pg+'initdb',['-D','/work/pgdata','-A','trust','--no-locale','--encoding=UTF8']);
   const postgres=start(pg+'postgres',['-D','/work/pgdata','-k','/tmp','-h','127.0.0.1','-p','55432']);
   for(let i=0;i<60;i++){try{execute(pg+'pg_isready',['-h','127.0.0.1','-p','55432']);break;}catch{await new Promise(r=>setTimeout(r,250));}}
   execute(pg+'createdb',['-h','127.0.0.1','-p','55432','restore']);
   const sql=q=>execute(pg+'psql',['-X','-h','127.0.0.1','-p','55432','-d','restore','-v','ON_ERROR_STOP=1','-Atc',q]);
   for(const role of ['anon','authenticated','service_role','nutsnews_app','nutsnews_readonly','nutsnews_worker_api','nutsnews_migration_restore','nutsnews_migration_validation'])sql('CREATE ROLE '+role+' NOLOGIN');
   execute(pg+'pg_restore',['--exit-on-error','--no-owner','--no-acl','-h','127.0.0.1','-p','55432','-d','restore','/work/database.dump']);
-  if(id==='nutsnews-backend'){
+  if(['nutsnews-backend','nutsnews-cloud-workers'].includes(id)){
     assert(Number(sql('select count(*) from public.articles'))>0,'Restored article data required');
-    start('/usr/bin/python3',['/work/app/nutsnews_worker_db_api.py'],{PYTHONPATH:'/work/python',NUTSNEWS_WORKER_DB_API_DB_HOST:'127.0.0.1',NUTSNEWS_WORKER_DB_API_DB_PORT:'55432',NUTSNEWS_WORKER_DB_API_DB_NAME:'restore',NUTSNEWS_WORKER_DB_API_DB_USER:'nobody',NUTSNEWS_WORKER_DB_API_DB_PASSWORD:'isolated',NUTSNEWS_BACKEND_API_TOKEN:'isolated-token'});
+    const savedConfiguration=Object.fromEntries((await fs.readFile('/work/configuration','utf8')).split('\n').filter(line=>/^[A-Z_][A-Z0-9_]*=/.test(line)).map(line=>{const split=line.indexOf('=');return [line.slice(0,split),line.slice(split+1).replace(/^(["'])(.*)\1$/,'$2')];}));
+    const writes=savedConfiguration.NUTSNEWS_WORKER_DB_API_WRITES_ENABLED;
+    if(id==='nutsnews-cloud-workers')assert(['1','true','yes','on'].includes(String(writes).toLowerCase()),'Archived backend must permit the production worker write contract');
+    start('/usr/bin/python3',['/work/app/nutsnews_worker_db_api.py'],{NUTSNEWS_WORKER_DB_API_WRITES_ENABLED:writes||'false',NUTSNEWS_WORKER_DB_API_MAX_LIMIT:savedConfiguration.NUTSNEWS_WORKER_DB_API_MAX_LIMIT||'10000',PYTHONPATH:'/work/python',NUTSNEWS_WORKER_DB_API_DB_HOST:'127.0.0.1',NUTSNEWS_WORKER_DB_API_DB_PORT:'55432',NUTSNEWS_WORKER_DB_API_DB_NAME:'restore',NUTSNEWS_WORKER_DB_API_DB_USER:'nobody',NUTSNEWS_WORKER_DB_API_DB_PASSWORD:'isolated',NUTSNEWS_BACKEND_API_TOKEN:'isolated-token'});
     await ready('http://127.0.0.1:8093/readyz');
     const feed=await(await get('http://127.0.0.1:8093/api/app/db/load-public-feed-snapshot',{method:'POST',headers:{Authorization:'Bearer isolated-token','content-type':'application/json'},body:JSON.stringify({providerMode:'backend_postgres_shadow',limit:2})})).json();assert(Array.isArray(feed)&&feed.length>0,'Restored feed must contain articles');const expected=sql('select original_url from public.public_feed_snapshot order by snapshot_rank asc limit 2').split('\n');assert.deepEqual(feed.map(row=>row.original_url),expected);
+    if(id==='nutsnews-cloud-workers'){
+     await fs.writeFile('/work/restored-feed.json',JSON.stringify(feed));
+     const before=sql('select md5(string_agg(original_url, chr(10) order by original_url)) from public.articles');
+     const runs=Number(sql('select count(*) from public.worker_runs'));
+     execute('node',['/work/cloud-smoke.mjs']);
+     assert.equal(sql('select md5(string_agg(original_url, chr(10) order by original_url)) from public.articles'),before,'Duplicate replay changed article identities');
+     assert(Number(sql('select count(*) from public.worker_runs'))>=runs+3,'All three replay runs must persist');
+    }
   }else{
     const snapshots=Number(sql('select count(*) from snapshots'));assert(snapshots>0,'Saved Fantasy snapshots required');
     start('node',['--import','tsx','server/index.ts'],{DATABASE_URL:'postgresql://nobody:isolated@127.0.0.1:55432/restore',PORT:'3100',APP_ORIGIN:'http://127.0.0.1:3100'},'/work/app');

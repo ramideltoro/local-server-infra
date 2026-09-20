@@ -9,6 +9,8 @@ import * as netlifyApps from './netlify.mjs';
 import * as firebaseApps from './firebase.mjs';
 import * as workers from './workers.mjs';
 import * as raspberry from './raspberry.mjs';
+import * as cloudWorkers from './cloud-workers.mjs';
+import {startRevisionRefresh} from './revision-refresh.mjs';
 const tools=path.dirname(fileURLToPath(import.meta.url));
 const credentials=await envFile('/etc/observe-recovery/credentials.env');
 const key=await fs.readFile('/etc/observe-recovery/key');
@@ -19,17 +21,19 @@ await fs.mkdir(base+'/public',{recursive:true,mode:0o755});
 await fs.chmod(base,0o711);
 let evidence;try{evidence=JSON.parse(await fs.readFile(base+'/public/evidence.json','utf8'));}catch{evidence={version:1,systems:{}};}
 const selected=process.argv.slice(2).filter(a=>!a.startsWith('--'));
-const allIds=[...Object.keys(staticSites.sites),...localApps.ids,...backendApps.ids,...netlifyApps.ids,...firebaseApps.ids,...workers.ids,...raspberry.ids];
+const allIds=[...Object.keys(staticSites.sites),...localApps.ids,...backendApps.ids,...netlifyApps.ids,...firebaseApps.ids,...workers.ids,...raspberry.ids,...cloudWorkers.ids];
 const ids=selected.length?selected:allIds;
-async function publish(){const tmp=base+'/public/evidence.tmp';await json(tmp,evidence);await fs.chmod(tmp,0o644);await fs.rename(tmp,base+'/public/evidence.json');}
+let pendingPublish=Promise.resolve();
+function publish(){const next=pendingPublish.then(async()=>{const tmp=base+'/public/evidence.tmp';await json(tmp,evidence);await fs.chmod(tmp,0o644);await fs.rename(tmp,base+'/public/evidence.json');});pendingPublish=next.catch(()=>{});return next;}
 // Re-probe deployment identities between serialized drills so long weekly runs
 // cannot let earlier applications' current-revision observations expire.
 async function refreshDeployments(){
-for(const id of allIds){evidence.systems[id]??={};const provider=staticSites.sites[id]?staticSites:backendApps.ids.includes(id)?backendApps:netlifyApps.ids.includes(id)?netlifyApps:firebaseApps.ids.includes(id)?firebaseApps:workers.ids.includes(id)?workers:raspberry.ids.includes(id)?raspberry:localApps;try{evidence.systems[id].revision=await provider.revision(id,credentials.GITHUB_TOKEN);evidence.systems[id].observedAt=new Date().toISOString();}catch{evidence.systems[id].revision=null;}}
+for(const id of allIds){evidence.systems[id]??={};const provider=staticSites.sites[id]?staticSites:backendApps.ids.includes(id)?backendApps:netlifyApps.ids.includes(id)?netlifyApps:firebaseApps.ids.includes(id)?firebaseApps:workers.ids.includes(id)?workers:raspberry.ids.includes(id)?raspberry:cloudWorkers.ids.includes(id)?cloudWorkers:localApps;try{evidence.systems[id].revision=await provider.revision(id,credentials.GITHUB_TOKEN);evidence.systems[id].observedAt=new Date().toISOString();}catch{evidence.systems[id].revision=null;}}
 await publish();
 }
+const stopRefresh=startRevisionRefresh(refreshDeployments,300000,()=>console.log('Deployment observation refresh unavailable'));
 await run('rclone',['copyto','/etc/observe-recovery/key',cloud+'/keys/'+keyId+'.key'],{env:cloudEnv});
-for(const id of ids){const provider=staticSites.sites[id]?staticSites:backendApps.ids.includes(id)?backendApps:netlifyApps.ids.includes(id)?netlifyApps:firebaseApps.ids.includes(id)?firebaseApps:workers.ids.includes(id)?workers:raspberry.ids.includes(id)?raspberry:localApps;if(!staticSites.sites[id]&&!localApps.ids.includes(id)&&!backendApps.ids.includes(id)&&!netlifyApps.ids.includes(id)&&!firebaseApps.ids.includes(id)&&!workers.ids.includes(id)&&!raspberry.ids.includes(id))throw Error('Unknown application');
+for(const id of ids){const provider=staticSites.sites[id]?staticSites:backendApps.ids.includes(id)?backendApps:netlifyApps.ids.includes(id)?netlifyApps:firebaseApps.ids.includes(id)?firebaseApps:workers.ids.includes(id)?workers:raspberry.ids.includes(id)?raspberry:cloudWorkers.ids.includes(id)?cloudWorkers:localApps;if(!staticSites.sites[id]&&!localApps.ids.includes(id)&&!backendApps.ids.includes(id)&&!netlifyApps.ids.includes(id)&&!firebaseApps.ids.includes(id)&&!workers.ids.includes(id)&&!raspberry.ids.includes(id)&&!cloudWorkers.ids.includes(id))throw Error('Unknown application');
  const previous=evidence.systems[id]||{};let revision;
  try{revision=await provider.revision(id,credentials.GITHUB_TOKEN);evidence.systems[id]={...previous,revision,observedAt:new Date().toISOString()};await publish();}catch{evidence.systems[id]={...previous,revision:null,observedAt:new Date().toISOString()};await publish();console.log(id+': deployment unavailable');continue;}
  const prior=provider.restore?previous.restore:previous.readiness;
@@ -61,10 +65,11 @@ for(const id of ids){const provider=staticSites.sites[id]?staticSites:backendApp
  if(failure&&!tests['archive-integrity'])evidence.systems[id].readiness={...result};
  await publish();
  // Private output is encrypted before cleanup; no raw DB, credentials or logs leave this tree.
- await json(work+'/evidence.json',result);await fs.mkdir(work+'/verification',{recursive:true});for(const name of ['manifest.json','deployment.json','source-backup.json','evidence.json','failure.json','result.json','application.log','init.log','postgres.log','restore.log']) { try { await fs.copyFile(work+'/'+name,work+'/verification/'+name); } catch(e) { if(e.code!=='ENOENT')throw e; } }const detail=work+'.tar';await run('tar',['cf',detail,'-C',work+'/verification','.'],{timeout:900000});await seal(detail,base+'/private/'+id+'-'+stamp+'.enc',key);await fs.rm(detail);await fs.rm(work,{recursive:true});
+ await json(work+'/evidence.json',result);await fs.mkdir(work+'/verification',{recursive:true});for(const name of ['cloud-result.json','manifest.json','deployment.json','source-backup.json','evidence.json','failure.json','result.json','application.log','init.log','postgres.log','restore.log']) { try { await fs.copyFile(work+'/'+name,work+'/verification/'+name); } catch(e) { if(e.code!=='ENOENT')throw e; } }const detail=work+'.tar';await run('tar',['cf',detail,'-C',work+'/verification','.'],{timeout:900000});await seal(detail,base+'/private/'+id+'-'+stamp+'.enc',key);await fs.rm(detail);await fs.rm(work,{recursive:true});
  console.log(id+': '+result.outcome+(failure?' ('+failure.message+')':''));
  await refreshDeployments();
 }
 
 
+await stopRefresh();
 await refreshDeployments();
