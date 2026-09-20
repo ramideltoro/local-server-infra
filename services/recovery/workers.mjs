@@ -23,4 +23,4 @@ export async function capture(id,rev,dir){const name=service(id);const before=aw
  if(['approval','translation'].includes(name)){await fs.mkdir(dir+'/qwen');await localApps.capture('qwen',await localApps.revision('qwen'),dir+'/qwen');}
  await json(dir+'/deployment.json',{id,revision:rev,scope:'Deployed worker, durable database state and broker topology; empty production queues verified before and after capture',emptyQueues:count});
 }
-export async function restore(id,dir){await fs.copyFile(new URL('./worker-smoke.mjs',import.meta.url),dir+'/worker-smoke.mjs');await sandbox(dir,['node','/work/worker-smoke.mjs',service(id)],{postgres:true,broker:true,timeout:900000});}
+export async function restore(id,dir){for(const file of ['worker-smoke.mjs','worker-environment.mjs'])await fs.copyFile(new URL('./'+file,import.meta.url),dir+'/'+file);await sandbox(dir,['node','/work/worker-smoke.mjs',service(id)],{postgres:true,broker:true,timeout:900000});}

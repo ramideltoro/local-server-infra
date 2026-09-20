@@ -18,12 +18,13 @@ await fs.mkdir(base+'/public',{recursive:true,mode:0o755});
 await fs.chmod(base,0o711);
 let evidence;try{evidence=JSON.parse(await fs.readFile(base+'/public/evidence.json','utf8'));}catch{evidence={version:1,systems:{}};}
 const selected=process.argv.slice(2).filter(a=>!a.startsWith('--'));
-const ids=selected.length?selected:[...Object.keys(staticSites.sites),...localApps.ids,...backendApps.ids,...netlifyApps.ids,...firebaseApps.ids,...workers.ids];
+const allIds=[...Object.keys(staticSites.sites),...localApps.ids,...backendApps.ids,...netlifyApps.ids,...firebaseApps.ids,...workers.ids];
+const ids=selected.length?selected:allIds;
 async function publish(){const tmp=base+'/public/evidence.tmp';await json(tmp,evidence);await fs.chmod(tmp,0o644);await fs.rename(tmp,base+'/public/evidence.json');}
 // Re-probe deployment identities between serialized drills so long weekly runs
 // cannot let earlier applications' current-revision observations expire.
 async function refreshDeployments(){
-for(const id of ids){evidence.systems[id]??={};const provider=staticSites.sites[id]?staticSites:backendApps.ids.includes(id)?backendApps:netlifyApps.ids.includes(id)?netlifyApps:firebaseApps.ids.includes(id)?firebaseApps:workers.ids.includes(id)?workers:localApps;try{evidence.systems[id].revision=await provider.revision(id,credentials.GITHUB_TOKEN);evidence.systems[id].observedAt=new Date().toISOString();}catch{evidence.systems[id].revision=null;}}
+for(const id of allIds){evidence.systems[id]??={};const provider=staticSites.sites[id]?staticSites:backendApps.ids.includes(id)?backendApps:netlifyApps.ids.includes(id)?netlifyApps:firebaseApps.ids.includes(id)?firebaseApps:workers.ids.includes(id)?workers:localApps;try{evidence.systems[id].revision=await provider.revision(id,credentials.GITHUB_TOKEN);evidence.systems[id].observedAt=new Date().toISOString();}catch{evidence.systems[id].revision=null;}}
 await publish();
 }
 await run('rclone',['copyto','/etc/observe-recovery/key',cloud+'/keys/'+keyId+'.key'],{env:cloudEnv});
