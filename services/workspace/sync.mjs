@@ -25,6 +25,11 @@ const publicDir = dir + "/grafana-public/dashboards",
   ownerDir = dir + "/grafana-owner/dashboards";
 await fs.mkdir(publicDir, { recursive: true });
 await fs.mkdir(ownerDir, { recursive: true });
+// Retired native dashboards leave public provisioning, while history stays private.
+const retiredDir = dir + "/retired-dashboards";
+await fs.mkdir(retiredDir, { recursive: true, mode: 0o700 });
+try { await fs.rename(publicDir + "/mookie-server.json", retiredDir + "/mookie-server.json"); }
+catch (error) { if (error.code !== "ENOENT") throw error; }
 const eventAnnotations = {
   list: [
     {

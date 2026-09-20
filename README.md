@@ -36,8 +36,8 @@ The infrastructure pipeline provisions two isolated, resource-limited Grafana 13
 
 Google-authenticated manual dispatch and validated dashboard publishing use the existing automation credential, held only in the private portal runtime configuration. No email or messaging notifications are added. Read the [daily-report operations guide](https://localserver.wiki.ramideltoro.com/technical/daily-reports/) and [dashboard editing guide](https://localserver.wiki.ramideltoro.com/technical/workspace-editing/) before changing policy.
 
-### Mookie enrollment
-Deploy also reconciles `ansible/mookie.yml` through the local-server SSH jump host. The verified address/key live in `config/mookie.json`; credentials are GitHub secrets `MOOKIE_SERVER_PASSWORD` and `MOOKIE_TELEMETRY_ENV`. Alloy collects resources, service state/restarts, and private journal logs with bounded CPU/RAM. A minute timer supplies Pi temperature, power/throttle flags and freshness. No backup or application deployment is implied by enrollment. See the [Mookie wiki](https://localserver.wiki.ramideltoro.com/technical/mookie/).
+### Mookie retirement
+Mookie was removed from the fleet by its owner on September 20, 2026. Deployments no longer enroll or contact it; reconciliation removes only its ten explicitly owned alert rules. Historical enrollment assets and reports are retained. Do not run the archived enrollment scripts against a potentially reused address. See the [retirement record](https://localserver.wiki.ramideltoro.com/technical/mookie/).
 
 ## Operational health workspace
 

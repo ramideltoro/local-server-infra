@@ -279,6 +279,7 @@ await run("fleet", "cloud-alert-source", async () => {
     get("/api/alertmanager/grafana/api/v2/alerts"),
   ]);
   for (const rule of alertCatalog(rules, groups, instances).rules) {
+    if (inventory.retired.some(s => s.id === rule.system)) continue;
     const failed = [
       "firing",
       "alerting",
