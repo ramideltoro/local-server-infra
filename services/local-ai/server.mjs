@@ -722,6 +722,7 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
 
   if (req.method === "GET" && url.pathname === "/health") {
+    res.once("finish", () => console.log(JSON.stringify({event:"health-response",status:res.statusCode})));
     await handleHealth(res);
     return;
   }

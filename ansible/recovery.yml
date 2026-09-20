@@ -1,0 +1,94 @@
+- name: Install isolation tools without adding a database service
+  ansible.builtin.apt:
+    name: [bubblewrap, postgresql-client-18]
+    state: present
+    update_cache: false
+- name: Create root-controlled recovery directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: /etc/observe-recovery, mode: '0700'}
+    - {path: /var/lib/observe-recovery, mode: '0711'}
+    - {path: /var/lib/observe-recovery/public, mode: '0755'}
+    - {path: /var/lib/observe-recovery/archives, mode: '0700'}
+    - {path: /var/lib/observe-recovery/private, mode: '0700'}
+    - {path: /var/lib/observe-recovery/staging, mode: '0700'}
+    - {path: /var/lib/observe-recovery/runtime, mode: '0700'}
+- name: Extract isolated PostgreSQL binaries without installing or enabling a host server
+  ansible.builtin.shell: |
+    set -eu
+    apt-get download postgresql-18
+    mkdir -p pg
+    dpkg-deb -x postgresql-18*.deb pg
+    cp --update=none /usr/lib/postgresql/18/bin/* pg/usr/lib/postgresql/18/bin/
+  args:
+    chdir: /var/lib/observe-recovery/runtime
+    creates: /var/lib/observe-recovery/runtime/pg/usr/lib/postgresql/18/bin/postgres
+- name: Install complete public database backup with dependency metadata
+  ansible.builtin.copy:
+    src: ../services/recovery/nutsnews-db-backup.sh
+    dest: /usr/local/sbin/nutsnews-db-backup.sh
+    owner: root
+    group: root
+    mode: '0700'
+    validate: /bin/bash -n %s
+- name: Install root-owned recovery controller
+  ansible.builtin.copy:
+    src: ../services/recovery/
+    dest: /opt/local-server-infra/recovery/
+    directory_mode: '0755'
+    owner: root
+    group: root
+    mode: '0644'
+- name: Pin backend recovery SSH identity
+  ansible.builtin.copy:
+    dest: /etc/observe-recovery/backend-known-hosts
+    owner: root
+    mode: '0600'
+    content: |
+      65.75.201.18 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH9hGB9rmTbnVIiUkI1rKpDL37QtYu/Sw+XmnTyltVC/
+- name: Install serialized bounded recovery service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/observe-recovery.service
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Isolated application recovery evidence
+      After=network-online.target
+      ConditionPathExists=/etc/observe-recovery/credentials.env
+      ConditionPathExists=/etc/observe-recovery/key
+      [Service]
+      Type=oneshot
+      User=root
+      UMask=0077
+      ExecStart=/usr/bin/flock -n /run/observe-recovery.lock /usr/bin/node /opt/local-server-infra/recovery/runner.mjs
+      CPUQuota=200%
+      MemoryMax=8G
+      MemorySwapMax=0
+      Nice=15
+      IOWeight=10
+      TimeoutStartSec=6h
+      KillMode=control-group
+- name: Poll deployments and schedule weekly recovery verification
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/observe-recovery.timer
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Observe deployment changes and weekly restore due dates
+      [Timer]
+      OnBootSec=10min
+      OnUnitInactiveSec=15min
+      AccuracySec=30s
+      [Install]
+      WantedBy=timers.target
+- name: Enable recovery timer
+  ansible.builtin.systemd_service:
+    name: observe-recovery.timer
+    enabled: true
+    state: started
+    daemon_reload: true
