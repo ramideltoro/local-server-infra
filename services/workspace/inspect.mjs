@@ -1,3 +1,4 @@
+import { inspectLogWindow } from "./log-window.mjs";
 import { logSelector } from "./log-scope.mjs";
 import { inspectionWindow } from "./window.mjs";
 import { summarizeWithQwen } from "./summarize.mjs";
@@ -162,55 +163,16 @@ for (const server of inventory.servers) {
   for (const source of server.sources)
     if (source === "logs")
       await run(server.id, "recurring-errors", async () => {
-        let cursor = BigInt(Math.floor(start)) * 1000000000n,
-          stop = BigInt(Math.floor(end)) * 1000000000n,
-          total = 0,
-          pages = 0,
-          complete = false;
-        const patterns = new Map();
-        while (pages++ < 10) {
-          const p = new URLSearchParams({
-            query:
-              logSelector(server.id, instances[server.id]) +
-              ' |~ "(?i)error|fatal|panic|failed"',
-            start: String(cursor),
-            end: String(stop),
-            limit: "500",
-            direction: "forward",
-          });
-          const j = await get(
-            "/api/datasources/proxy/uid/" +
-              process.env.LOKI_UID +
-              "/loki/api/v1/query_range?" +
-              p,
-          );
-          if (j.status !== "success") throw Error("Log query failed");
-          const entries = (j.data.result || []).flatMap((s) => s.values);
-          total += entries.length;
-          // Public evidence is a fixed classification, never arbitrary raw log text.
-          for (const [, line] of entries) {
-            const kind = /out of memory|oom/i.test(line)
-              ? "memory exhaustion"
-              : /timeout|timed out/i.test(line)
-                ? "timeout"
-                : /connection refused|connection reset/i.test(line)
-                  ? "connection failure"
-                  : /permission denied|unauthorized/i.test(line)
-                    ? "authorization failure"
-                    : "application error";
-            patterns.set(kind, (patterns.get(kind) || 0) + 1);
-          }
-          if (entries.length < 500) {
-            complete = true;
-            break;
-          }
-          const next = entries.reduce(
-            (a, [t]) => (BigInt(t) > a ? BigInt(t) : a),
-            cursor,
-          );
-          if (next <= cursor) break;
-          cursor = next + 1n;
-        }
+        const stop = BigInt(Math.floor(end)) * 1000000000n;
+        const { complete, entries: total, pages, patterns } = await inspectLogWindow(
+          async (cursor, stop, limit) => {
+            const p = new URLSearchParams({
+              query: logSelector(server.id, instances[server.id]) + ' |~ "(?i)error|fatal|panic|failed"',
+              start: String(cursor), end: String(stop), limit: String(limit), direction: "forward",
+            });
+            return get("/api/datasources/proxy/uid/" + process.env.LOKI_UID + "/loki/api/v1/query_range?" + p);
+          }, BigInt(Math.floor(start)) * 1000000000n, stop,
+        );
         // An empty error stream does not prove the underlying log source is present.
         const p = new URLSearchParams({
           query:
@@ -225,10 +187,11 @@ for (const server of inventory.servers) {
             "/loki/api/v1/query_range?" +
             p,
         );
+        if (live.status !== "success" || live.data?.resultType !== "streams") throw Error("Fresh log query failed");
         const present = (live.data?.result || []).some((s) => s.values?.length);
         return {
           complete:
-            complete && pages === 1 && present && start === requestedStart,
+            complete && present && start === requestedStart,
           note: !present
             ? "No fresh log samples"
             : complete
