@@ -87,6 +87,8 @@
       notify: Reload systemd
     - name: Configure public observability workspace
       ansible.builtin.import_tasks: workspace.yml
+    - name: Configure bounded isolated recovery
+      ansible.builtin.import_tasks: recovery.yml
     - name: Ensure Alloy can read journal records
       ansible.builtin.user:
         name: alloy
@@ -109,8 +111,16 @@
             scrape_interval = "60s"
             forward_to = [prometheus.remote_write.metrics_service.receiver]
           }
+          loki.relabel "local_service_identity" {
+            forward_to = []
+            rule {
+              source_labels = ["__journal__systemd_unit"]
+              target_label = "unit"
+            }
+          }
           loki.source.journal "local_server_services" {
             max_age = "1h"
+            relabel_rules = loki.relabel.local_service_identity.rules
             labels = {"instance" = "chingadera", "job" = "local-server-services"}
             matches = "_SYSTEMD_UNIT=nutsnews-local-ai.service _SYSTEMD_UNIT=ollama.service _SYSTEMD_UNIT=local-server-observability.service _SYSTEMD_UNIT=kubequest.service _SYSTEMD_UNIT=fantasy-qwen.service"
             forward_to = [loki.write.grafana_cloud_loki.receiver]

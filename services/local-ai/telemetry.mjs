@@ -23,6 +23,7 @@ export function createTelemetry() {
         const seconds = (performance.now() - start) / 1000;
         c.inflight--;
         c.requests++;
+        console.log(JSON.stringify({event:"inference-response",operation,status:res.statusCode,completed:res.writableFinished}));
         if (res.statusCode >= 400 || !res.writableFinished) c.errors++;
         c.sum += seconds;
         bounds.forEach((b, i) => {
