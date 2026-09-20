@@ -12,4 +12,5 @@ fs.appendFileSync(process.env.HOME+'/.ssh/known_hosts',host.host+' '+host.hostKe
 fs.writeFileSync(process.env.RUNNER_TEMP+'/raspberry-inventory.json',JSON.stringify({all:{hosts:{raspberry:{ansible_host:host.host,ansible_user:host.user,ansible_password:process.env.RASPBERRY_PI_ADMIN_PASSWORD,ansible_become_password:process.env.RASPBERRY_PI_ADMIN_PASSWORD,ansible_ssh_common_args:'-o StrictHostKeyChecking=yes -o ProxyJump='+host.jumpHost}}}}),{mode:0o600});
 NODE
 trap 'rm -f "$RUNNER_TEMP/raspberry-inventory.json"' EXIT
+export RASPBERRY_RECOVERY_PUBLIC_KEY="$(ssh localserver.ramideltoro.com 'sudo cat /etc/observe-recovery/raspberry-key.pub')"
 ansible-playbook -i "$RUNNER_TEMP/raspberry-inventory.json" ansible/raspberry.yml

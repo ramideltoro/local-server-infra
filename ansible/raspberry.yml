@@ -142,3 +142,39 @@
       until: readiness.status == 200
       retries: 12
       delay: 5
+    - name: Install read-only off-host backup exporter
+      ansible.builtin.copy:
+        src: ../services/raspberry/recovery-export.sh
+        dest: /usr/local/sbin/observe-raspberry-export
+        owner: root
+        group: root
+        mode: '0755'
+        validate: /bin/bash -n %s
+    - name: Validate dedicated recovery public key
+      ansible.builtin.assert:
+        that:
+          - lookup('env', 'RASPBERRY_RECOVERY_PUBLIC_KEY') is match('^ssh-ed25519 [A-Za-z0-9+/=]+ observe-raspberry-backup$')
+    - name: Create SSH directory if absent
+      ansible.builtin.file:
+        path: /home/piadmin/.ssh
+        state: directory
+        owner: piadmin
+        group: piadmin
+        mode: '0700'
+    - name: Add only the forced-command recovery key
+      ansible.builtin.lineinfile:
+        path: /home/piadmin/.ssh/authorized_keys
+        create: true
+        owner: piadmin
+        group: piadmin
+        mode: '0600'
+        line: 'restrict,command="sudo -n /usr/local/sbin/observe-raspberry-export \"$SSH_ORIGINAL_COMMAND\"" {{ lookup("env", "RASPBERRY_RECOVERY_PUBLIC_KEY") }}'
+    - name: Permit only the two backup export operations without an interactive password
+      ansible.builtin.copy:
+        dest: /etc/sudoers.d/observe-raspberry-export
+        owner: root
+        group: root
+        mode: '0440'
+        validate: /usr/sbin/visudo -cf %s
+        content: |
+          piadmin ALL=(root) NOPASSWD: /usr/local/sbin/observe-raspberry-export revision, /usr/local/sbin/observe-raspberry-export archive

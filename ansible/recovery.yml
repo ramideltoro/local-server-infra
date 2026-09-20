@@ -148,3 +148,14 @@
     enabled: true
     state: started
     daemon_reload: true
+- name: Create restricted Raspberry backup identity without changing passwords
+  ansible.builtin.command: ssh-keygen -q -t ed25519 -N '' -C observe-raspberry-backup -f /etc/observe-recovery/raspberry-key
+  args:
+    creates: /etc/observe-recovery/raspberry-key
+- name: Pin Raspberry backup SSH identity
+  ansible.builtin.copy:
+    dest: /etc/observe-recovery/raspberry-known-hosts
+    owner: root
+    mode: '0600'
+    content: |
+      192.168.1.77 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMo8kqtuf55NMdeADM1LVLP6cUwBYcNG39K8JFNyZekF
