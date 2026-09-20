@@ -22,7 +22,7 @@ async function publish(){const tmp=base+'/public/evidence.tmp';await json(tmp,ev
 // Re-probe deployment identities between serialized drills so long weekly runs
 // cannot let earlier applications' current-revision observations expire.
 async function refreshDeployments(){
-for(const id of ids){const provider=staticSites.sites[id]?staticSites:backendApps.ids.includes(id)?backendApps:netlifyApps.ids.includes(id)?netlifyApps:workers.ids.includes(id)?workers:localApps;try{evidence.systems[id].revision=await provider.revision(id,credentials.GITHUB_TOKEN);evidence.systems[id].observedAt=new Date().toISOString();}catch{evidence.systems[id].revision=null;}}
+for(const id of ids){evidence.systems[id]??={};const provider=staticSites.sites[id]?staticSites:backendApps.ids.includes(id)?backendApps:netlifyApps.ids.includes(id)?netlifyApps:workers.ids.includes(id)?workers:localApps;try{evidence.systems[id].revision=await provider.revision(id,credentials.GITHUB_TOKEN);evidence.systems[id].observedAt=new Date().toISOString();}catch{evidence.systems[id].revision=null;}}
 await publish();
 }
 await run('rclone',['copyto','/etc/observe-recovery/key',cloud+'/keys/'+keyId+'.key'],{env:cloudEnv});
