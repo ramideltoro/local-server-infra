@@ -109,3 +109,41 @@
     enabled: true
     state: started
     daemon_reload: true
+- name: Install private production log presence collector
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/observe-cloud-logs.service
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Verify production ingestion log presence without exporting log content
+      ConditionPathExists=/etc/observe-recovery/credentials.env
+      [Service]
+      Type=oneshot
+      User=root
+      UMask=0077
+      ExecStart=/usr/bin/node /opt/local-server-infra/recovery/cloud-logs.mjs
+      CPUQuota=10%
+      MemoryMax=128M
+      TimeoutStartSec=45
+      NoNewPrivileges=true
+      ProtectSystem=strict
+      ProtectHome=true
+      ReadWritePaths=/var/lib/observe-recovery/public
+- name: Install production log presence timer
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/observe-cloud-logs.timer
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Refresh production log presence every five minutes
+      [Timer]
+      OnBootSec=2min
+      OnUnitInactiveSec=5min
+      [Install]
+      WantedBy=timers.target
+- name: Enable production log presence timer
+  ansible.builtin.systemd_service:
+    name: observe-cloud-logs.timer
+    enabled: true
+    state: started
+    daemon_reload: true
