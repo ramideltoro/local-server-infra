@@ -38,6 +38,7 @@ for(const id of ids){const provider=staticSites.sites[id]?staticSites:backendApp
  try{
   await provider.capture(id,revision,work,credentials.GITHUB_TOKEN);
   await fs.copyFile(tools+'/smoke.mjs',work+'/smoke.mjs');
+  await fs.copyFile(tools+'/membership.mjs',work+'/membership.mjs');
   await json(work+'/manifest.json',{id,revision,capturedAt:new Date().toISOString()});
   const tar=work+'.tar';await run('tar',['cf',tar,'-C',work,'.'],{timeout:900000});await seal(tar,archive,key);await fs.rm(tar);
   backupReference=await hash(archive);
