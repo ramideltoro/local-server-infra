@@ -25,7 +25,7 @@ const runtime=new Miniflare({host:'127.0.0.1',port:0,workers:deployments.map(d=>
   const url=new URL(request.url);
   if(rssUrls.has(request.url)){calls.rss++;return new MFResponse(rss,{headers:{'content-type':'application/rss+xml'}});}
   if(url.origin==='http://127.0.0.1:8093'&&url.pathname.startsWith('/api/worker/db/')){
-   calls.database++;const r=await fetch(request.url,{method:request.method,headers:Object.fromEntries(request.headers),body:request.method==='GET'?undefined:await request.arrayBuffer(),signal:AbortSignal.timeout(30000)});return new MFResponse(await r.arrayBuffer(),{status:r.status,headers:Object.fromEntries(r.headers)});
+   calls.database++;const r=await fetch(request.url,{method:request.method,headers:Object.fromEntries([...request.headers].filter(([name])=>!['connection','keep-alive','transfer-encoding','te','trailer','upgrade','host','content-length'].includes(name.toLowerCase()))),body:request.method==='GET'?undefined:await request.arrayBuffer(),signal:AbortSignal.timeout(30000)});return new MFResponse(await r.arrayBuffer(),{status:r.status,headers:Object.fromEntries(r.headers)});
   }
   denied.push(url.origin);throw Error('Unexpected external action blocked by isolated recovery');
  }};

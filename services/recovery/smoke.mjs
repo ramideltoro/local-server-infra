@@ -45,7 +45,10 @@ try{
   execute(pg+'pg_restore',['--exit-on-error','--no-owner','--no-acl','-h','127.0.0.1','-p','55432','-d','restore','/work/database.dump']);
   if(['nutsnews-backend','nutsnews-cloud-workers'].includes(id)){
     assert(Number(sql('select count(*) from public.articles'))>0,'Restored article data required');
-    start('/usr/bin/python3',['/work/app/nutsnews_worker_db_api.py'],{PYTHONPATH:'/work/python',NUTSNEWS_WORKER_DB_API_DB_HOST:'127.0.0.1',NUTSNEWS_WORKER_DB_API_DB_PORT:'55432',NUTSNEWS_WORKER_DB_API_DB_NAME:'restore',NUTSNEWS_WORKER_DB_API_DB_USER:'nobody',NUTSNEWS_WORKER_DB_API_DB_PASSWORD:'isolated',NUTSNEWS_BACKEND_API_TOKEN:'isolated-token'});
+    const savedConfiguration=Object.fromEntries((await fs.readFile('/work/configuration','utf8')).split('\n').filter(line=>/^[A-Z_][A-Z0-9_]*=/.test(line)).map(line=>{const split=line.indexOf('=');return [line.slice(0,split),line.slice(split+1).replace(/^(["'])(.*)\1$/,'$2')];}));
+    const writes=savedConfiguration.NUTSNEWS_WORKER_DB_API_WRITES_ENABLED;
+    if(id==='nutsnews-cloud-workers')assert(['1','true','yes','on'].includes(String(writes).toLowerCase()),'Archived backend must permit the production worker write contract');
+    start('/usr/bin/python3',['/work/app/nutsnews_worker_db_api.py'],{NUTSNEWS_WORKER_DB_API_WRITES_ENABLED:writes||'false',NUTSNEWS_WORKER_DB_API_MAX_LIMIT:savedConfiguration.NUTSNEWS_WORKER_DB_API_MAX_LIMIT||'10000',PYTHONPATH:'/work/python',NUTSNEWS_WORKER_DB_API_DB_HOST:'127.0.0.1',NUTSNEWS_WORKER_DB_API_DB_PORT:'55432',NUTSNEWS_WORKER_DB_API_DB_NAME:'restore',NUTSNEWS_WORKER_DB_API_DB_USER:'nobody',NUTSNEWS_WORKER_DB_API_DB_PASSWORD:'isolated',NUTSNEWS_BACKEND_API_TOKEN:'isolated-token'});
     await ready('http://127.0.0.1:8093/readyz');
     const feed=await(await get('http://127.0.0.1:8093/api/app/db/load-public-feed-snapshot',{method:'POST',headers:{Authorization:'Bearer isolated-token','content-type':'application/json'},body:JSON.stringify({providerMode:'backend_postgres_shadow',limit:2})})).json();assert(Array.isArray(feed)&&feed.length>0,'Restored feed must contain articles');const expected=sql('select original_url from public.public_feed_snapshot order by snapshot_rank asc limit 2').split('\n');assert.deepEqual(feed.map(row=>row.original_url),expected);
     if(id==='nutsnews-cloud-workers'){
