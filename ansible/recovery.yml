@@ -82,7 +82,8 @@
       Type=oneshot
       User=root
       UMask=0077
-      ExecStart=/usr/bin/flock -n /run/observe-recovery.lock /usr/bin/node /opt/local-server-infra/recovery/runner.mjs
+      ExecStart=/usr/bin/flock -n -E 75 /run/observe-recovery.lock /usr/bin/node /opt/local-server-infra/recovery/runner.mjs
+      SuccessExitStatus=75
       CPUQuota=200%
       MemoryMax=8G
       MemorySwapMax=0
