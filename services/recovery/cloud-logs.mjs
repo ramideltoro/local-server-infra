@@ -1,4 +1,7 @@
 import fs from 'node:fs/promises';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import {collectFantasyWorkload} from './fantasy-workload.mjs';
 import {pathToFileURL} from 'node:url';
 import {envFile,base,json} from './lib.mjs';
 export const services=['nutsnews-worker-0','nutsnews-worker-1','nutsnews-worker-2'];
@@ -20,6 +23,7 @@ export async function observe(credentials,fetcher=fetch,now=Date.now()){
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  let document;
  try{document=await observe(await envFile('/etc/observe-recovery/credentials.env'));}catch{document={version:1,observedAt:new Date().toISOString(),systems:{}};}
+ try{const execute=promisify(execFile);const result=await collectFantasyWorkload((command,args)=>execute(command,args,{timeout:5000,maxBuffer:4*1024*1024}));document.workloads={fantasyQwen:result};}catch{document.workloads={};}
  await fs.mkdir(base+'/public',{recursive:true,mode:0o755});
  const tmp=base+'/public/cloud-logs.tmp';await json(tmp,document);await fs.chmod(tmp,0o644);await fs.rename(tmp,base+'/public/cloud-logs.json');
  console.log(document.systems.nutsnews?'Production log presence verified':'Production log presence remains unverified');
