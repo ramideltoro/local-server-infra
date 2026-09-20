@@ -44,6 +44,23 @@
     owner: root
     group: root
     mode: '0644'
+- name: Scope image backup retention and telemetry to this host's image archives
+  ansible.builtin.copy:
+    src: "../services/recovery/{{ item }}"
+    dest: "/usr/local/sbin/{{ item }}"
+    owner: root
+    group: root
+    mode: '0700'
+    backup: true
+    validate: /bin/bash -n %s
+  loop:
+    - home-server-image-backup.sh
+    - home-server-backup-status-metrics.sh
+- name: Preserve the existing image backup schedule after installing safe retention
+  ansible.builtin.systemd_service:
+    name: home-server-image-backup.timer
+    state: started
+    enabled: true
 - name: Pin backend recovery SSH identity
   ansible.builtin.copy:
     dest: /etc/observe-recovery/backend-known-hosts
