@@ -69,6 +69,15 @@ service_active_value() {
   fi
 }
 
+# A retained older cloud image cannot turn a failed latest attempt into success.
+last_attempt_success() {
+  case "$1" in
+    success) echo 1 ;;
+    failed) echo 0 ;;
+    *) echo "$2" ;;
+  esac
+}
+
 NOW_TS="$(date +%s)"
 
 CLOUD_BACKUPS="$(rclone lsf homebackup: --dirs-only 2>/dev/null | while IFS= read -r name; do
@@ -83,6 +92,8 @@ CLOUD_COUNT="$(printf '%s\n' "$CLOUD_BACKUPS" | sed '/^$/d' | wc -l | tr -d ' ')
 LATEST_BACKUP="$(printf '%s\n' "$CLOUD_BACKUPS" | sed '/^$/d' | sort | tail -n 1)"
 
 EXISTING_LAST_SUCCESS="$(read_existing_metric home_server_backup_last_success 0)"
+ATTEMPT_STATUS="$(awk -F= '$1 == "STATUS" {print $2}' /var/lib/home-server-backup/latest.env 2>/dev/null || true)"
+EXISTING_LAST_SUCCESS="$(last_attempt_success "$ATTEMPT_STATUS" "$EXISTING_LAST_SUCCESS")"
 EXISTING_LAST_RUN_TS="$(read_existing_metric home_server_backup_last_run_timestamp_seconds 0)"
 EXISTING_LAST_SIZE_BYTES="$(read_existing_metric home_server_backup_last_size_bytes 0)"
 EXISTING_LAST_FILE_COUNT="$(read_existing_metric home_server_backup_last_file_count 0)"
@@ -111,9 +122,6 @@ if [[ -n "$LATEST_BACKUP" ]]; then
     EXISTING_LAST_FILE_COUNT="$LATEST_CLOUD_FILE_COUNT"
   fi
 
-  if [[ "$EXISTING_LAST_SUCCESS" == "0" && "$LATEST_CLOUD_FILE_COUNT" != "0" ]]; then
-    EXISTING_LAST_SUCCESS="1"
-  fi
 fi
 
 NEXT_RUN_TS="$(get_next_run_timestamp)"
