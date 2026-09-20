@@ -12,5 +12,5 @@ export async function capture(id,revision,dir){const prefix=id==='fantasy'?'fant
  if(id==='nutsnews-backend'){await download('backend-dependencies',dir+'/python.tar');await fs.mkdir(dir+'/python');await run('tar',['xf',dir+'/python.tar','--no-same-owner','-C',dir+'/python']);}
  await json(dir+'/deployment.json',{id,revision,backup:'consistent-logical-export-or-saved-application-backup'});
 }
-export async function prepare(id,dir){await writable(dir);if(id==='fantasy')await sandbox(dir+'/app',['/bin/bash','-c','npm ci --no-audit --no-fund'],{network:true,timeout:900000});}
+export async function prepare(id,dir){await writable(dir);if(id==='fantasy')await sandbox(dir+'/app',['/bin/bash','-c','npm ci --ignore-scripts --no-audit --no-fund'],{network:true,timeout:900000});}
 export async function restore(id,dir){await sandbox(dir,['node','/work/smoke.mjs',id],{postgres:true,timeout:900000});}
