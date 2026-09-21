@@ -10,6 +10,18 @@
           - ansible_facts.hostname == 'rpi4'
           - ansible_facts.distribution == 'Debian'
           - ansible_facts.architecture == 'aarch64'
+    - name: Preserve legacy OpenSSH login accounting on Debian
+      ansible.builtin.copy:
+        dest: /etc/tmpfiles.d/observe-ssh-accounting.conf
+        mode: '0644'
+        content: |
+          # Compatibility for OpenSSH logout accounting on Debian 13.
+          # Create only when absent; never truncate active accounting records.
+          f /run/utmp 0664 root utmp -
+    - name: Create missing volatile SSH accounting file without restarting SSH
+      ansible.builtin.command:
+        argv: [systemd-tmpfiles, --create, /etc/tmpfiles.d/observe-ssh-accounting.conf]
+      changed_when: false
     - name: Install transport dependencies
       ansible.builtin.apt:
         name: [ca-certificates, curl]
