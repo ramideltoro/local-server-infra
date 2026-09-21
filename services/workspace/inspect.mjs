@@ -1,4 +1,5 @@
 import { inspectionThreshold } from "./metric-threshold.mjs";
+import { pricedipChecks } from "./pricedip-checks.mjs";
 import { inspectLogWindow } from "./log-window.mjs";
 import { logSelector } from "./log-scope.mjs";
 import { inspectionWindow } from "./window.mjs";
@@ -115,6 +116,13 @@ for (const m of publicMetrics) {
       };
     },
   );
+}
+try {
+  const response=await fetch("http://127.0.0.1:4310/api/public/operations/health",{signal:AbortSignal.timeout(10000)});
+  if (!response.ok) throw Error("Operational evidence unavailable");
+  checks.push(...pricedipChecks(await response.json()));
+} catch {
+  for (const system of ["pricedip","pricedip-wiki"]) checks.push({system,id:"operational-evidence",complete:false,failures:[],note:"Operational evidence unavailable; previous findings remain unverified"});
 }
 const instances = {
   local: "chingadera",
